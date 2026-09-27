@@ -7,12 +7,14 @@ const weatherService = require('./weather.service');
 async function getForecast(req, res, next) {
   try {
     const user = req.user || {};
-    const { farmId, kebeleId, woredaId, lat, lng, days, forceRefresh } = req.query;
+    const { farmId, kebeleId, woredaId, zoneId, regionId, lat, lng, days, forceRefresh } = req.query;
 
     const data = await weatherService.getWeatherForecast({
       farmId: farmId || null,
       kebeleId: kebeleId || null,
       woredaId: woredaId || null,
+      zoneId: zoneId || null,
+      regionId: regionId || null,
       lat: lat || null,
       lng: lng || null,
       user,
@@ -29,12 +31,14 @@ async function getForecast(req, res, next) {
 async function getCurrentWeather(req, res, next) {
   try {
     const user = req.user || {};
-    const { farmId, kebeleId, woredaId, lat, lng, forceRefresh } = req.query;
+    const { farmId, kebeleId, woredaId, zoneId, regionId, lat, lng, forceRefresh } = req.query;
 
     const forecast = await weatherService.getWeatherForecast({
       farmId: farmId || null,
       kebeleId: kebeleId || null,
       woredaId: woredaId || null,
+      zoneId: zoneId || null,
+      regionId: regionId || null,
       lat: lat || null,
       lng: lng || null,
       user,
