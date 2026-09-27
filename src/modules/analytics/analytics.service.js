@@ -1,7 +1,3 @@
-
-const {
-  getLiveRegionalWeatherData,
-} = require('./services/regionalWeather.service');
 const weatherService = require('../weather/weather.service');
 const { prisma, isConnected } = require('../../config/db');
 const openRouterClient = require('../../utils/openRouterClient');
@@ -394,7 +390,7 @@ async function getDashboardSummary({ role, userId, woredaId, zoneId, regionId } 
       };
 
       // ── 4. Dynamic Satellite & Sensor Telemetry Strip ──
-      const soilMoistureVal = Math.round((34.0 + Math.min(18.0, (liveWeather.rain || 0) * 1.6)) * 10) / 10;
+      const soilMoistureVal = Math.round((34.0 + Math.min(18.0, (weatherSummary.current.rainfall || 0) * 1.6)) * 10) / 10;
       const droughtRiskLevel = activeEarlyWarnings > 3 ? 'HIGH' : (activeEarlyWarnings > 0 ? 'MODERATE' : 'LOW');
       const telemetryStatus = seasonCondition === 'STRESSED' ? 'ELEVATED RISK' : (seasonCondition === 'BELOW_NORMAL' ? 'WATCH' : 'HEALTHY');
 
