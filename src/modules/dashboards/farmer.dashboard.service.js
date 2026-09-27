@@ -315,12 +315,19 @@ class FarmerDashboardService {
         level: forecast.location.level,
         current: {
           temperatureC: forecast.current.temperatureC,
+          feelsLikeC: forecast.current.feelsLikeC,
           condition: forecast.current.conditionEn,
           conditionAm: forecast.current.conditionAm,
           conditionOm: forecast.current.conditionOm,
           humidityPercent: forecast.current.relativeHumidity,
           rainfallMm: forecast.current.precipitationMm,
           windSpeedKmh: forecast.current.windSpeedKmh,
+          windGustsKmh: forecast.current.windGustsKmh,
+          uvIndex: forecast.current.uvIndex,
+          surfacePressureHpa: forecast.current.surfacePressureHpa,
+          et0EvapotranspirationMm: forecast.current.et0EvapotranspirationMm,
+          sunrise: forecast.current.sunrise,
+          sunset: forecast.current.sunset,
         },
         forecast7Day: forecast.daily.map((d) => {
           const dayDate = new Date(d.date);
