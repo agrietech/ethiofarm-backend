@@ -399,6 +399,9 @@ class HyperLocalAgronomyEngine {
       soilHealth: soilDiagnostic,
       microClimate: microWeather,
       remoteSensing: {
+        engine: planetary.engine || 'GOOGLE_EARTH_ENGINE_LIVE',
+        liveCloudConnection: Boolean(planetary.liveCloudConnection),
+        cloudProjectId: planetary.cloudProjectId || 'agrietech',
         sentinel2Ndvi10m: planetary.sentinel2Ndvi,
         ndreChlorophyll: planetary.ndreChlorophyll,
         sarSoilMoisturePct: planetary.soilMoisturePct,
