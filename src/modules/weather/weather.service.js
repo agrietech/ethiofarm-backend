@@ -566,7 +566,6 @@ async function getWeatherForecast({
     for (let i = 0; i < requestedDays; i++) {
       const d = new Date(today.getTime() + i * 86400000);
       const dateStr = d.toISOString().split('T')[0];
-      const cond = resolveWeatherDetails(0);
 
       daily.push({
         date: dateStr,
