@@ -1,5 +1,6 @@
 const { dispatchJob } = require('./jobs/queue');
 const connectors = require('./connectors');
+const { broadcastTelemetry } = require('../delivery/websocket/riskAssessmentChannel');
 
 // Manual on-demand ingestion trigger
 async function triggerPull(req, res, next) {
@@ -59,6 +60,11 @@ async function ingestTelemetry(req, res, next) {
       try {
         const sensor = await prisma.sensor.findFirst({
           where: { OR: [{ id: sensorId }, { hardwareId: sensorId }] },
+          include: {
+            farm: {
+              select: { woredaId: true },
+            },
+          },
         });
 
         if (sensor) {
@@ -67,6 +73,12 @@ async function ingestTelemetry(req, res, next) {
               ...readingData,
               sensorId: sensor.id,
             },
+          });
+
+          broadcastTelemetry({
+            farmId: sensor.farmId,
+            woredaId: sensor.farm?.woredaId,
+            reading,
           });
         }
       } catch (dbErr) {
