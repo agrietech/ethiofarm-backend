@@ -132,14 +132,24 @@ async function disconnectDB() {
   isDbConnected = false;
 }
 
+let isPinging = false;
+
 // Check database connection status
 function isConnected() {
   if (isDbConnected) return true;
   // If connection string is configured and pool is active, allow queries and ping in background
   if (pool && !pool.ending && !pool.ended && Boolean(connectionString && connectionString.length > 10)) {
-    pool.query('SELECT 1').then(() => {
-      isDbConnected = true;
-    }).catch(() => {});
+    if (!isPinging) {
+      isPinging = true;
+      pool.query('SELECT 1')
+        .then(() => {
+          isDbConnected = true;
+        })
+        .catch(() => {})
+        .finally(() => {
+          isPinging = false;
+        });
+    }
     return true;
   }
   return false;
