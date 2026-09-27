@@ -25,9 +25,11 @@ class FarmerDashboardService {
       }
     }
 
+    const myFarms = await this.getMyFarms(userId);
+    const primaryFarm = myFarms?.[0];
+
     // Parallel data fetching for optimal latency
     const [
-      myFarms,
       myAlerts,
       sensorStatus,
       recentDiagnoses,
@@ -35,13 +37,12 @@ class FarmerDashboardService {
       marketPrices,
       weatherData,
     ] = await Promise.all([
-      this.getMyFarms(userId),
       this.getMyAlerts(userId, woredaId),
       this.getSensorStatus(userId),
       this.getRecentDiagnoses(userId),
       this.getAdvisories(woredaId),
       this.getMarketPrices(woredaId),
-      this.getWeatherSummary(woredaId),
+      this.getWeatherSummary(woredaId, primaryFarm?.id),
     ]);
 
     const totalArea = myFarms.reduce((sum, f) => sum + (Number(f.areaHectares) || 0), 0);
@@ -298,35 +299,62 @@ class FarmerDashboardService {
     ];
   }
 
-  async getWeatherSummary(woredaId) {
-    let woredaName = 'Local Area';
-    if (woredaId) {
-      try {
-        const w = await prisma.woreda.findUnique({ where: { id: woredaId }, select: { nameEn: true } });
-        if (w) woredaName = w.nameEn;
-      } catch (_e) {}
-    }
+  async getWeatherSummary(woredaId, farmId = null) {
+    try {
+      const weatherService = require('../weather/weather.service');
+      const forecast = await weatherService.getWeatherForecast({
+        woredaId,
+        farmId,
+        days: 7,
+      });
 
-    return {
-      location: woredaName,
-      current: {
-        temperatureC: 22.4,
-        condition: 'Partly Cloudy',
-        conditionAm: 'ከፊል ደመናማ',
-        humidityPercent: 62,
-        rainfallMm: 2.1,
-        windSpeedKmh: 11.2,
-      },
-      forecast7Day: [
-        { day: 'Monday', tempMax: 24, tempMin: 12, rainfallMm: 1.5, condition: 'Sunny', farmingAdvice: 'Good day for fertilizer application.' },
-        { day: 'Tuesday', tempMax: 25, tempMin: 13, rainfallMm: 0.0, condition: 'Sunny', farmingAdvice: 'Ideal for field spraying.' },
-        { day: 'Wednesday', tempMax: 23, tempMin: 14, rainfallMm: 8.5, condition: 'Scattered Showers', farmingAdvice: 'Moderate rainfall expected; delay heavy irrigation.' },
-        { day: 'Thursday', tempMax: 21, tempMin: 11, rainfallMm: 14.0, condition: 'Rain', farmingAdvice: 'Ensure drainage channels around teff plots are open.' },
-        { day: 'Friday', tempMax: 22, tempMin: 12, rainfallMm: 3.2, condition: 'Overcast', farmingAdvice: 'Scout for fungal spore germination.' },
-        { day: 'Saturday', tempMax: 24, tempMin: 13, rainfallMm: 0.5, condition: 'Partly Cloudy', farmingAdvice: 'Normal weeding operations.' },
-        { day: 'Sunday', tempMax: 26, tempMin: 14, rainfallMm: 0.0, condition: 'Sunny', farmingAdvice: 'Optimal solar conditions.' },
-      ],
-    };
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+      return {
+        location: forecast.location.nameEn,
+        level: forecast.location.level,
+        current: {
+          temperatureC: forecast.current.temperatureC,
+          condition: forecast.current.conditionEn,
+          conditionAm: forecast.current.conditionAm,
+          conditionOm: forecast.current.conditionOm,
+          humidityPercent: forecast.current.relativeHumidity,
+          rainfallMm: forecast.current.precipitationMm,
+          windSpeedKmh: forecast.current.windSpeedKmh,
+        },
+        forecast7Day: forecast.daily.map((d) => {
+          const dayDate = new Date(d.date);
+          const dayName = dayNames[dayDate.getDay()] || 'Today';
+          let farmingAdvice = 'Optimal solar conditions for field operations.';
+          if (d.precipitationMm > 8.0) {
+            farmingAdvice = 'Heavy rainfall expected: clear drainage channels and delay spraying/fertilizer.';
+          } else if (d.precipitationMm > 2.0) {
+            farmingAdvice = 'Moderate showers expected: pause irrigation and monitor crop moisture.';
+          } else if (d.windSpeedKmh > 20.0) {
+            farmingAdvice = 'High winds: delay pesticide spraying to avoid drift.';
+          } else if (d.maxTempC > 28.0) {
+            farmingAdvice = 'Elevated temperatures: check soil moisture and schedule morning irrigation.';
+          } else {
+            farmingAdvice = 'Favorable weather: ideal for field scouting, weeding, and fertilizer application.';
+          }
+
+          return {
+            date: d.date,
+            day: dayName,
+            tempMax: d.maxTempC,
+            tempMin: d.minTempC,
+            rainfallMm: d.precipitationMm,
+            condition: d.conditionEn,
+            conditionAm: d.conditionAm,
+            conditionOm: d.conditionOm,
+            farmingAdvice,
+          };
+        }),
+      };
+    } catch (err) {
+      logger.warn(`[FarmerDashboard] Live weather fetch notice: ${err.message}`);
+      return null;
+    }
   }
 
   calculateFarmHealth(farm, alertCount = 0) {
