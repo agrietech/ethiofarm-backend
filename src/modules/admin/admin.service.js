@@ -279,6 +279,10 @@ async function updateUserRole(userId, newRole, adminContext = {}) {
     }),
   ]);
 
+  try {
+    await redis.del(`permissions:${userId}`);
+  } catch (_e) {}
+
   return updatedUser;
 }
 
@@ -1253,16 +1257,17 @@ async function cleanTestData(adminContext = {}) {
     try {
       const allUsers = await prisma.user.findMany({ select: { id: true, email: true, role: true } });
       const testUsers = allUsers.filter(u => {
-        if (u.role === 'ADMIN' || u.email.includes('admin@ethiofarm.et')) return false;
+        if (u.role === 'ADMIN' || (u.email && u.email.includes('admin@ethiofarm.et'))) return false;
         return (
           u.email && (
             u.email.startsWith('audit_farmer_') ||
             u.email.startsWith('farmer_diag_') ||
             u.email.startsWith('test_') ||
             u.email.startsWith('mock_') ||
-            u.email.startsWith('farmer_178') ||
-            u.email.startsWith('woreda_officer_178') ||
-            u.email.startsWith('admin_178') ||
+            u.email.startsWith('farmer_17') ||
+            u.email.startsWith('farmer_') ||
+            u.email.startsWith('woreda_officer_') ||
+            u.email.startsWith('admin_17') ||
             u.email.startsWith('render_test_') ||
             u.email.startsWith('camera_farmer_') ||
             u.email.startsWith('form_user_') ||
