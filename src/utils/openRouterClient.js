@@ -4,11 +4,11 @@ const logger = require('./logger');
 
 // Model assignment mapping for the configured key pool slots
 const SLOT_MODEL_PAIRINGS = [
-  'nex-agi/nex-n2.5-mini:free',
-  'nex-agi/nex-n2.5-pro:free',
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'minimax/minimax-m3:free',
-  'liquid/lfm-2.5-2.6b:free',
+  'google/gemini-2.0-flash-exp:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen-2.5-coder-32b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
+  'deepseek/deepseek-r1:free',
 ];
 
 /**
@@ -21,7 +21,7 @@ class OpenRouterClient {
       ? env.OPENROUTER_API_KEYS_LIST
       : (env.OPENROUTER_API_KEY ? [env.OPENROUTER_API_KEY] : []);
     this.apiKey = this.apiKeys[0] || '';
-    this.model = env.OPENROUTER_MODEL || 'nex-agi/nex-n2.5-mini:free';
+    this.model = env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-exp:free';
     this.baseUrl = env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
     this.appUrl = env.OPENROUTER_SITE_URL || env.APP_URL || 'https://agrietech.onrender.com';
     this.siteName = env.OPENROUTER_SITE_NAME || 'EthioFarm Smart Farming Platform';
@@ -241,7 +241,7 @@ class OpenRouterClient {
 
     // 0. Direct Google Gemini Multi-Account Pool Integration (1,500 free requests/day per account)
     if (this.geminiKeyPool && this.geminiKeyPool.length > 0 && messages.length > 0) {
-      const geminiCandidateModels = ['gemini-3.6-flash'];
+      const geminiCandidateModels = ['gemini-3.8-flash'];
       const geminiContent = messages
         .map((m) => `${(m.role || 'user').toUpperCase()}: ${typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.map(c => c.text || '').filter(Boolean).join(' ') : JSON.stringify(m.content))}`)
         .join('\n\n');
@@ -334,10 +334,8 @@ class OpenRouterClient {
 
     const primaryModel = model || this.model;
     const candidateModels = [
-      'nex-agi/nex-n2.5-mini:free',
-      'nex-agi/nex-n2.5-pro:free',
-      'nvidia/nemotron-3-super-120b-a12b:free',
       primaryModel,
+      'google/gemma-4-26b-a4b-it:free',
       'liquid/lfm-2.5-2.6b:free',
     ].filter((m, i, arr) => m && arr.indexOf(m) === i);
 
@@ -663,7 +661,7 @@ Required JSON format:
     // 1. Direct High-Speed Google Gemini Multimodal Vision (Multi-Account Pool)
     if (this.geminiKeyPool && this.geminiKeyPool.length > 0) {
       const geminiVisionModels = [
-        'gemini-3.6-flash',
+        'gemini-3.8-flash',
       ];
       const userTextPrompt = `Analyze this Ethiopian crop disease sample. Return ONLY a single valid JSON object following the requested schema.
 Crop Hint: ${cropHint || 'Unknown'}.
