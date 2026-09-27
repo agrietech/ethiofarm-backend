@@ -4,26 +4,26 @@ const controller = require('./sensors.controller');
 const { telemetryLimiter } = require('../../middleware/rate-limiter.middleware');
 
 // authenticateSensor is now maintained in the unified auth middleware
-const { authenticate, authenticateSensor } = require('../../middleware/auth.middleware');
+const { authenticate, authenticateSensor, authorize } = require('../../middleware/auth.middleware');
+const { buildSensorScope } = require('../../middleware/scope-filter.utils');
 
-
-
-
-// Scope filter middleware for sensor queries
+// Centralized scope filter middleware for sensor queries.
+// Delegates to the canonical buildSensorScope() to avoid duplicating
+// jurisdiction logic that lives in scope-filter.utils.js.
 const enforceSensorScope = (req, _res, next) => {
   const user = req.user;
   if (!user) return next();
-  if (user.role === 'FARMER') {
-    req.query.userId = user.id;
-  } else if (user.role === 'DEVELOPMENT_AGENT') {
-    if (user.kebeleId) req.query.kebeleId = user.kebeleId;
-    else if (user.woredaId) req.query.woredaId = user.woredaId;
-  } else if (user.role === 'WOREDA_OFFICER') {
-    if (user.woredaId) req.query.woredaId = user.woredaId;
-  } else if (user.role === 'ZONAL_OFFICER') {
-    if (user.zoneId) req.query.zoneId = user.zoneId;
-  } else if (user.role === 'REGIONAL_OFFICER') {
-    if (user.regionId) req.query.regionId = user.regionId;
+
+  const scope = buildSensorScope(user);
+
+  // Translate the Prisma where-clause into query params that the controller
+  // can merge into its own queries when it reads from req.query.
+  if (scope.farm) {
+    if (scope.farm.userId) req.query.userId = scope.farm.userId;
+    if (scope.farm.kebeleId) req.query.kebeleId = scope.farm.kebeleId;
+    if (scope.farm.woredaId) req.query.woredaId = scope.farm.woredaId;
+    if (scope.farm.woreda?.zoneId) req.query.zoneId = scope.farm.woreda.zoneId;
+    if (scope.farm.woreda?.zone?.regionId) req.query.regionId = scope.farm.woreda.zone.regionId;
   }
   next();
 };
@@ -40,10 +40,9 @@ router.get('/telemetry/summary', authenticate, enforceSensorScope, controller.ge
 router.post('/telemetry', authenticateSensor, telemetryLimiter, controller.recordTelemetry);
 router.get('/farm/:farmId', authenticate, controller.getSensors);
 
-// Allow farmers, agents, officers, and admins to register a sensor individually
-router.post('/', authenticate, controller.registerSensor);
+// Register a sensor — restricted to roles with sensors.register permission
+router.post('/', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ADMIN'), controller.registerSensor);
 router.get('/', authenticate, enforceSensorScope, controller.getSensors);
-
 
 // Telemetry query endpoints matching Flutter SensorRepository
 router.get('/:id/telemetry', authenticate, controller.getSensorTelemetry);
@@ -51,7 +50,7 @@ router.get('/:hardwareId/latest', authenticate, controller.getLatestSensorReadin
 
 // Single sensor details & OCC update endpoints
 router.get('/:id', authenticate, controller.getSensorDetails);
-router.put('/:id', authenticate, controller.updateSensor);
-router.patch('/:id', authenticate, controller.updateSensor);
+router.put('/:id', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ADMIN'), controller.updateSensor);
+router.patch('/:id', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ADMIN'), controller.updateSensor);
 
 module.exports = router;
