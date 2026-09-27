@@ -310,9 +310,9 @@ async function getWeatherForecast({
       params: {
         latitude: location.lat,
         longitude: location.lng,
-        current: 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m',
+        current: 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,is_day',
         hourly: 'temperature_2m,precipitation_probability,weather_code,relative_humidity_2m,wind_speed_10m',
-        daily: 'weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_direction_10m_dominant,uv_index_max,et0_fao_evapotranspiration',
+        daily: 'weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,uv_index_max,et0_fao_evapotranspiration,sunrise,sunset',
         timezone: 'Africa/Addis_Ababa',
         forecast_days: requestedDays,
       },
@@ -347,10 +347,21 @@ async function getWeatherForecast({
   } catch (_e) {}
 
   // 6. Structure Current Telemetry
+  const elevation = location.elevationMeters || 1850;
+  // Standard environmental lapse rate in Ethiopia: ~6.5°C per 1000m
+  const estimatedTemp = Math.round((28.5 - ((elevation - 500) * 0.0058)) * 10) / 10;
+
   let current;
   if (openMeteoData?.current) {
     const c = openMeteoData.current;
     const cond = resolveWeatherDetails(c.weather_code);
+    const et0Val = openMeteoData.daily?.et0_fao_evapotranspiration?.[0] != null
+      ? Math.round(openMeteoData.daily.et0_fao_evapotranspiration[0] * 10) / 10
+      : Math.round(Math.max(2.0, (c.temperature_2m * 0.18)) * 10) / 10;
+    const gustVal = openMeteoData.daily?.wind_gusts_10m_max?.[0] != null
+      ? Math.round(openMeteoData.daily.wind_gusts_10m_max[0] * 10) / 10
+      : null;
+
     current = {
       temperatureC: Math.round(c.temperature_2m * 10) / 10,
       maxTempC: openMeteoData.daily?.temperature_2m_max?.[0] ?? Math.round(c.temperature_2m * 10) / 10,
@@ -359,6 +370,7 @@ async function getWeatherForecast({
       relativeHumidity: c.relative_humidity_2m,
       precipitationMm: c.precipitation || 0.0,
       windSpeedKmh: Math.round(c.wind_speed_10m * 10) / 10,
+      windGustsKmh: gustVal,
       windDirectionDeg: c.wind_direction_10m,
       surfacePressureHpa: Math.round(c.surface_pressure * 10) / 10,
       weatherCode: String(c.weather_code),
@@ -368,8 +380,10 @@ async function getWeatherForecast({
       conditionType: cond.type,
       description: openWeatherData?.weather?.description || cond.en,
       uvIndex: openMeteoData.daily?.uv_index_max?.[0] ?? 6.0,
-      sunrise: openWeatherData?.sunrise || null,
-      sunset: openWeatherData?.sunset || null,
+      et0EvapotranspirationMm: et0Val,
+      isDay: c.is_day === 1,
+      sunrise: openMeteoData.daily?.sunrise?.[0] || openWeatherData?.sunrise || null,
+      sunset: openMeteoData.daily?.sunset?.[0] || openWeatherData?.sunset || null,
       timestamp: c.time || new Date().toISOString(),
     };
   } else if (openWeatherData) {
@@ -383,15 +397,18 @@ async function getWeatherForecast({
       relativeHumidity: ow.humidity ?? Math.min(85, Math.max(30, Math.round(75 - (estimatedTemp - 15) * 2))),
       precipitationMm: 0.0,
       windSpeedKmh: (ow.wind?.speed ?? 3.5) * 3.6,
+      windGustsKmh: ow.wind?.gust ? ow.wind.gust * 3.6 : null,
       windDirectionDeg: ow.wind?.direction ?? 120,
-      surfacePressureHpa: ow.pressure ?? Math.round(1013.25 * Math.pow(1 - 2.25577e-5 * altitude, 5.25588)),
+      surfacePressureHpa: ow.pressure ?? Math.round(1013.25 * Math.pow(1 - 2.25577e-5 * elevation, 5.25588)),
       weatherCode: '0',
       conditionEn: ow.weather?.main || 'Clear',
       conditionAm: 'ጥርት ያለ',
       conditionOm: 'Qulqulluu',
       conditionType: 'sunny',
       description: ow.weather?.description || 'Clear Sky',
-      uvIndex: Math.round(Math.min(11, Math.max(4, 7.0 + (altitude > 2000 ? 1.5 : 0))) * 10) / 10,
+      uvIndex: Math.round(Math.min(11, Math.max(4, 7.0 + (elevation > 2000 ? 1.5 : 0))) * 10) / 10,
+      et0EvapotranspirationMm: Math.round(Math.max(2.0, (baseTemp * 0.18)) * 10) / 10,
+      isDay: true,
       sunrise: ow.sunrise,
       sunset: ow.sunset,
       timestamp: ow.timestamp,
@@ -408,9 +425,6 @@ async function getWeatherForecast({
       }
     } catch (_) {}
 
-    const elevation = location.elevationMeters || 1850;
-    // Standard environmental lapse rate in Ethiopia: ~6.5°C per 1000m
-    const estimatedTemp = Math.round((28.5 - ((elevation - 500) * 0.0058)) * 10) / 10;
     const obsMax = dbObservation?.nasaPowerTempMax ?? (estimatedTemp + 3.5);
     const obsMin = dbObservation?.nasaPowerTempMin ?? (estimatedTemp - 5.5);
     const obsHumidity = dbObservation?.nasaPowerHumidity ?? (elevation > 2200 ? 65.0 : 54.0);
@@ -430,6 +444,7 @@ async function getWeatherForecast({
       relativeHumidity: obsHumidity,
       precipitationMm: obsRain,
       windSpeedKmh: estWind,
+      windGustsKmh: Math.round(estWind * 1.5 * 10) / 10,
       windDirectionDeg: 120,
       surfacePressureHpa: surfacePressure,
       weatherCode: obsRain > 2.0 ? '61' : '0',
@@ -439,6 +454,8 @@ async function getWeatherForecast({
       conditionType: fallbackCond.type,
       description: fallbackCond.en,
       uvIndex: calculatedUv,
+      et0EvapotranspirationMm: Math.round(Math.max(2.0, (estimatedTemp * 0.18)) * 10) / 10,
+      isDay: true,
       sunrise: null,
       sunset: null,
       timestamp: new Date().toISOString(),
@@ -526,6 +543,7 @@ async function getWeatherForecast({
         precipitationMm: Math.round(rainMm * 10) / 10,
         precipitationProbability: d.precipitation_probability_max?.[i] ?? (rainMm > 2 ? 75 : 10),
         windSpeedKmh: Math.round((d.wind_speed_10m_max?.[i] ?? current.windSpeedKmh) * 10) / 10,
+        windGustsKmh: d.wind_gusts_10m_max?.[i] ? Math.round(d.wind_gusts_10m_max[i] * 10) / 10 : null,
         windDirectionDeg: d.wind_direction_10m_dominant?.[i] ?? current.windDirectionDeg,
         uvIndex: Math.round((d.uv_index_max?.[i] ?? current.uvIndex) * 10) / 10,
         weatherCode: String(code),
@@ -535,6 +553,8 @@ async function getWeatherForecast({
         conditionType: cond.type,
         description: cond.en,
         et0EvapotranspirationMm: et0,
+        sunrise: d.sunrise?.[i] || null,
+        sunset: d.sunset?.[i] || null,
         isToday: i === 0,
       });
     }
