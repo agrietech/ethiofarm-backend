@@ -33,7 +33,7 @@ describe('Sensors Module API Suite', () => {
     });
     await prisma.farm.upsert({
       where: { id: 'farm_demo_01' },
-      update: {},
+      update: { userId: 'usr_agent_01' },
       create: {
         id: 'farm_demo_01',
         userId: 'usr_agent_01',

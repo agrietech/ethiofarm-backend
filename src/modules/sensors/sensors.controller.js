@@ -1,5 +1,6 @@
 const sensorsService = require('./sensors.service');
 const { prisma } = require('../../config/db');
+const { assertResourceInScope, buildSensorScope, isNationalScope } = require('../../middleware/scope-filter.utils');
 
 async function registerSensor(req, res, next) {
   try {
@@ -45,50 +46,43 @@ async function recordTelemetry(req, res, next) {
 async function getSensors(req, res, next) {
   try {
     const farmId = req.params.farmId || req.query.farmId;
+    const user = req.user;
 
-    // If a specific farm is requested, return sensors for that farm
+    // If a specific farm is requested, verify scope before returning sensors for that farm
     if (farmId) {
+      if (user && !isNationalScope(user)) {
+        const farm = await prisma.farm.findUnique({
+          where: { id: farmId },
+          include: { woreda: { include: { zone: true } } },
+        });
+        if (!farm) {
+          return res.status(404).json({ success: false, error: { message: 'Farm not found' } });
+        }
+        assertResourceInScope(user, farm, 'farm');
+      }
       const data = await sensorsService.getSensorsByFarm(farmId);
       return res.status(200).json({ success: true, data });
     }
 
-    // Otherwise, scope sensors by user jurisdiction
-    const user = req.user || {};
-    const role = (user.role || '').toUpperCase();
-    const { prisma } = require('../../config/db');
-    let where = {};
-
-    if (role === 'FARMER') {
-      where = { farm: { userId: user.id } };
-    } else if (role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER') {
-      if (user.woredaId) where = { farm: { woredaId: user.woredaId } };
-    } else if (role === 'ZONAL_OFFICER') {
-      if (user.zoneId) where = { farm: { woreda: { zoneId: user.zoneId } } };
-    } else if (role === 'REGIONAL_OFFICER') {
-      if (user.regionId) where = { farm: { woreda: { zone: { regionId: user.regionId } } } };
-    }
-    // ADMIN and RESEARCHER: no scope filters
+    // Scope sensors by user jurisdiction
+    const where = user ? buildSensorScope(user) : {};
 
     let data = await prisma.sensor.findMany({
       where,
       include: {
         readings: { take: 5, orderBy: { recordedAt: 'desc' } },
-        farm: { select: { id: true, farmName: true, userId: true, woredaId: true } },
+        farm: { select: { id: true, farmName: true, userId: true, woredaId: true, kebeleId: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    // If an officer or researcher sees 0 sensors because their local woreda has no IoT hardware provisioned yet,
-    // provide active system sensors so they can test/monitor telemetry in the console
-    if (
-      data.length === 0 &&
-      (role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER' || role === 'ZONAL_OFFICER' || role === 'REGIONAL_OFFICER' || role === 'RESEARCHER')
-    ) {
+    // Fallback benchmark sensors ONLY for national-level RESEARCHER testing
+    if (data.length === 0 && user?.role === 'RESEARCHER') {
       data = await prisma.sensor.findMany({
         take: 10,
         include: {
           readings: { take: 5, orderBy: { recordedAt: 'desc' } },
-          farm: { select: { id: true, farmName: true, userId: true, woredaId: true } },
+          farm: { select: { id: true, farmName: true, userId: true, woredaId: true, kebeleId: true } },
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -130,7 +124,15 @@ async function getFarmerSensors(req, res, next) {
       });
     }
 
-    if (callerRole === 'DEVELOPMENT_AGENT' || callerRole === 'WOREDA_OFFICER') {
+    if (callerRole === 'DEVELOPMENT_AGENT') {
+      const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { woredaId: true, kebeleId: true } });
+      if (!targetUser || (caller.kebeleId && targetUser.kebeleId && targetUser.kebeleId !== caller.kebeleId) || (caller.woredaId && targetUser.woredaId !== caller.woredaId)) {
+        return res.status(403).json({
+          success: false,
+          error: { message: 'Access denied: Farmer is outside your kebele jurisdiction', code: 'FORBIDDEN' },
+        });
+      }
+    } else if (callerRole === 'WOREDA_OFFICER') {
       const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { woredaId: true } });
       if (!targetUser || (caller.woredaId && targetUser.woredaId !== caller.woredaId)) {
         return res.status(403).json({
@@ -138,7 +140,8 @@ async function getFarmerSensors(req, res, next) {
           error: { message: 'Access denied: Farmer is outside your woreda jurisdiction', code: 'FORBIDDEN' },
         });
       }
-    } else if (callerRole === 'ZONAL_OFFICER') {
+    }
+ else if (callerRole === 'ZONAL_OFFICER') {
       const targetUser = await prisma.user.findUnique({
         where: { id: userId },
         select: { zoneId: true, woreda: { select: { zoneId: true } } },
@@ -195,6 +198,9 @@ async function getSensorDetails(req, res, next) {
     if (!sensor) {
       return res.status(404).json({ success: false, error: { message: 'Sensor not found', code: 'NOT_FOUND' } });
     }
+    if (sensor.farm && req.user) {
+      assertResourceInScope(req.user, sensor.farm, 'sensor');
+    }
     res.status(200).json({ success: true, data: sensor });
   } catch (error) {
     next(error);
@@ -226,6 +232,13 @@ async function updateSensor(req, res, next) {
 async function getSensorTelemetry(req, res, next) {
   try {
     const { id } = req.params;
+    const sensor = await sensorsService.getSensorById(id);
+    if (!sensor) {
+      return res.status(404).json({ success: false, error: { message: 'Sensor not found', code: 'NOT_FOUND' } });
+    }
+    if (sensor.farm && req.user) {
+      assertResourceInScope(req.user, sensor.farm, 'sensor');
+    }
     const { startDate, endDate, limit } = req.query;
     const data = await sensorsService.getSensorTelemetry({
       id,
@@ -243,6 +256,10 @@ async function getLatestSensorReading(req, res, next) {
   try {
     const { hardwareId, id } = req.params;
     const target = hardwareId || id;
+    const sensor = await sensorsService.getSensorById(target);
+    if (sensor && sensor.farm && req.user) {
+      assertResourceInScope(req.user, sensor.farm, 'sensor');
+    }
     const data = await sensorsService.getLatestSensorReading(target);
     res.status(200).json({ success: true, data });
   } catch (error) {
@@ -253,7 +270,6 @@ async function getLatestSensorReading(req, res, next) {
 async function getAllTelemetry(req, res, next) {
   try {
     const user = req.user || {};
-    const role = (user.role || '').toUpperCase();
     const { limit = 50, startDate, endDate, farmId, sensorId } = req.query;
     const take = Math.min(Math.max(Number(limit) || 50, 1), 200);
 
@@ -264,18 +280,16 @@ async function getAllTelemetry(req, res, next) {
       if (endDate) where.recordedAt.lte = new Date(endDate);
     }
 
+    // Build base sensor scope from user's jurisdiction
+    const sensorWhere = buildSensorScope(user);
+
     if (sensorId) {
       where.sensorId = sensorId;
+      where.sensor = sensorWhere;
     } else if (farmId) {
-      where.sensor = { farmId };
-    } else if (role === 'FARMER') {
-      where.sensor = { farm: { userId: user.id } };
-    } else if (role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER') {
-      if (user.woredaId) where.sensor = { farm: { woredaId: user.woredaId } };
-    } else if (role === 'ZONAL_OFFICER') {
-      if (user.zoneId) where.sensor = { farm: { woreda: { zoneId: user.zoneId } } };
-    } else if (role === 'REGIONAL_OFFICER') {
-      if (user.regionId) where.sensor = { farm: { woreda: { zone: { regionId: user.regionId } } } };
+      where.sensor = { ...sensorWhere, farmId };
+    } else {
+      where.sensor = sensorWhere;
     }
 
     let data = await prisma.sensorReading.findMany({
@@ -290,33 +304,12 @@ async function getAllTelemetry(req, res, next) {
             sensorType: true,
             farmId: true,
             farm: {
-              select: { id: true, farmName: true, userId: true },
+              select: { id: true, farmName: true, userId: true, woredaId: true, kebeleId: true },
             },
           },
         },
       },
     });
-
-    // If no readings found for an officer or researcher's jurisdiction, fall back to recent system readings
-    if (data.length === 0 && role !== 'FARMER') {
-      data = await prisma.sensorReading.findMany({
-        take,
-        orderBy: { recordedAt: 'desc' },
-        include: {
-          sensor: {
-            select: {
-              id: true,
-              hardwareId: true,
-              sensorType: true,
-              farmId: true,
-              farm: {
-                select: { id: true, farmName: true, userId: true },
-              },
-            },
-          },
-        },
-      });
-    }
 
     res.status(200).json({ success: true, data });
   } catch (error) {

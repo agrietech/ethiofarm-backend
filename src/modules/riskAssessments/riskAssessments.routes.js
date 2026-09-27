@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('./riskAssessments.controller');
-const { authenticate, authorize, authorizeWoredaScope } = require('../../middleware/auth.middleware');
+const { authenticate, authorizeWoredaScope } = require('../../middleware/auth.middleware');
 
 // POST /evaluate — triggers a risk assessment for a specific woreda.
 // authorizeWoredaScope ensures FARMER/DA/WOREDA_OFFICER can only evaluate

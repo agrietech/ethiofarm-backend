@@ -1,11 +1,13 @@
 const adminService = require('./admin.service');
+const { assertResourceInScope } = require('../../middleware/scope-filter.utils');
+const logger = require('../../utils/logger');
 
 /**
  * Admin Controller - Professional Enterprise Dashboard
  */
-async function getOverview(_req, res, next) {
+async function getOverview(req, res, next) {
     try {
-        const data = await adminService.getOverview();
+        const data = await adminService.getOverview(req.user);
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -15,7 +17,7 @@ async function getOverview(_req, res, next) {
 async function getUsers(req, res, next) {
     try {
         const { page, limit, role, woredaId, search } = req.query;
-        const data = await adminService.getUsers({ page, limit, role, woredaId, search });
+        const data = await adminService.getUsers({ page, limit, role, woredaId, search, user: req.user });
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -82,7 +84,7 @@ async function deleteUser(req, res, next) {
 async function getFarms(req, res, next) {
     try {
         const { page, limit, woredaId, search } = req.query;
-        const data = await adminService.getFarms({ page, limit, woredaId, search });
+        const data = await adminService.getFarms({ page, limit, woredaId, search, user: req.user });
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -124,7 +126,7 @@ async function deleteFarm(req, res, next) {
 async function getSensors(req, res, next) {
     try {
         const { page, limit } = req.query;
-        const data = await adminService.getSensors({ page, limit });
+        const data = await adminService.getSensors({ page, limit, user: req.user });
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -155,7 +157,7 @@ async function deleteSensor(req, res, next) {
 async function getAlerts(req, res, next) {
     try {
         const { page, limit, hazardType, severity, woredaId, regionId } = req.query;
-        const data = await adminService.getAlerts({ page, limit, hazardType, severity, woredaId, regionId });
+        const data = await adminService.getAlerts({ page, limit, hazardType, severity, woredaId, regionId, user: req.user });
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -176,7 +178,7 @@ async function deleteAlert(req, res, next) {
 async function getDiagnoses(req, res, next) {
     try {
         const { page, limit } = req.query;
-        const data = await adminService.getDiagnoses({ page, limit });
+        const data = await adminService.getDiagnoses({ page, limit, user: req.user });
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -237,7 +239,7 @@ async function getFarmerAudienceStats(req, res, next) {
 async function getAuditLogs(req, res, next) {
     try {
         const { limit } = req.query;
-        const data = await adminService.getAuditLogs(limit);
+        const data = await adminService.getAuditLogs(limit, req.user);
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -486,6 +488,14 @@ async function getUserDetails(req, res, next) {
         const { id } = req.params;
         const data = await adminService.getUserById(id);
         if (!data) return res.status(404).json({ success: false, error: { message: 'User not found' } });
+
+        // Scope check: verify the target user is within the caller's jurisdiction
+        try {
+            assertResourceInScope(req.user, data, 'user');
+        } catch (scopeErr) {
+            return res.status(403).json({ success: false, error: { message: scopeErr.message, code: 'OUT_OF_SCOPE' } });
+        }
+
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -497,6 +507,14 @@ async function getFarmDetails(req, res, next) {
         const { id } = req.params;
         const data = await adminService.getFarmById(id);
         if (!data) return res.status(404).json({ success: false, error: { message: 'Farm not found' } });
+
+        // Scope check: verify the farm is within the caller's jurisdiction
+        try {
+            assertResourceInScope(req.user, data, 'farm');
+        } catch (scopeErr) {
+            return res.status(403).json({ success: false, error: { message: scopeErr.message, code: 'OUT_OF_SCOPE' } });
+        }
+
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -508,6 +526,16 @@ async function getSensorDetails(req, res, next) {
         const { id } = req.params;
         const data = await adminService.getSensorById(id);
         if (!data) return res.status(404).json({ success: false, error: { message: 'Sensor not found' } });
+
+        // Scope check: sensor → farm → woreda chain
+        if (data.farm) {
+            try {
+                assertResourceInScope(req.user, data.farm, 'sensor');
+            } catch (scopeErr) {
+                return res.status(403).json({ success: false, error: { message: scopeErr.message, code: 'OUT_OF_SCOPE' } });
+            }
+        }
+
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -519,6 +547,14 @@ async function getAlertDetails(req, res, next) {
         const { id } = req.params;
         const data = await adminService.getAlertById(id);
         if (!data) return res.status(404).json({ success: false, error: { message: 'Alert not found' } });
+
+        // Scope check: alert → woreda chain
+        try {
+            assertResourceInScope(req.user, data, 'alert');
+        } catch (scopeErr) {
+            return res.status(403).json({ success: false, error: { message: scopeErr.message, code: 'OUT_OF_SCOPE' } });
+        }
+
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -530,6 +566,16 @@ async function getDiagnosisDetails(req, res, next) {
         const { id } = req.params;
         const data = await adminService.getDiagnosisById(id);
         if (!data) return res.status(404).json({ success: false, error: { message: 'Diagnosis not found' } });
+
+        // Scope check: diagnosis → farm → woreda chain
+        if (data.farm) {
+            try {
+                assertResourceInScope(req.user, data.farm, 'diagnosis');
+            } catch (scopeErr) {
+                return res.status(403).json({ success: false, error: { message: scopeErr.message, code: 'OUT_OF_SCOPE' } });
+            }
+        }
+
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);

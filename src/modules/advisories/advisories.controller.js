@@ -1,6 +1,7 @@
 const advisoriesService = require('./advisories.service');
 const { ForbiddenError } = require('../../utils/errors');
 const { prisma } = require('../../config/db');
+const { assertResourceInScope } = require('../../middleware/scope-filter.utils');
 
 /**
  * Advisories Controller
@@ -13,7 +14,24 @@ async function getAdvisories(req, res, next) {
 
     // RBAC & Scoping enforcement
     if (user) {
-      if (user.role === 'FARMER' || user.role === 'DEVELOPMENT_AGENT' || user.role === 'WOREDA_OFFICER') {
+      if (user.role === 'FARMER') {
+        if (user.woredaId) {
+          if (woredaId && woredaId !== user.woredaId) {
+            throw new ForbiddenError('You can only view advisories for your assigned woreda');
+          }
+          woredaId = user.woredaId;
+        } else {
+          try {
+            const firstFarm = await prisma.farm.findFirst({
+              where: { userId: user.id },
+              select: { woredaId: true },
+            });
+            if (firstFarm?.woredaId) {
+              woredaId = firstFarm.woredaId;
+            }
+          } catch (_) {}
+        }
+      } else if (user.role === 'DEVELOPMENT_AGENT' || user.role === 'WOREDA_OFFICER') {
         if (!user.woredaId) {
           throw new ForbiddenError('Your account has no administrative woreda assigned');
         }
@@ -71,6 +89,9 @@ async function getAdvisories(req, res, next) {
 async function getAdvisoryById(req, res, next) {
   try {
     const advisory = await advisoriesService.getAdvisoryById(req.params.id);
+    if (req.user) {
+      assertResourceInScope(req.user, advisory, 'advisory');
+    }
     res.status(200).json({ success: true, data: advisory });
   } catch (error) {
     next(error);
@@ -99,6 +120,10 @@ async function createAdvisory(req, res, next) {
 
 async function updateAdvisory(req, res, next) {
   try {
+    const advisory = await advisoriesService.getAdvisoryById(req.params.id);
+    if (req.user) {
+      assertResourceInScope(req.user, advisory, 'advisory');
+    }
     const updated = await advisoriesService.updateAdvisory(req.params.id, req.body);
     res.status(200).json({ success: true, data: updated });
   } catch (error) {
@@ -108,6 +133,10 @@ async function updateAdvisory(req, res, next) {
 
 async function deleteAdvisory(req, res, next) {
   try {
+    const advisory = await advisoriesService.getAdvisoryById(req.params.id);
+    if (req.user) {
+      assertResourceInScope(req.user, advisory, 'advisory');
+    }
     const result = await advisoriesService.deleteAdvisory(req.params.id);
     res.status(200).json({ success: true, data: result });
   } catch (error) {

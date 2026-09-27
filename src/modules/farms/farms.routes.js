@@ -3,12 +3,13 @@ const router = express.Router();
 const { body } = require('express-validator');
 const controller = require('./farms.controller');
 const validate = require('../../middleware/validate.middleware');
-const { authenticate } = require('../../middleware/auth.middleware');
+const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
-// POST /api/v1/farms – Register a new farm
+// POST /api/v1/farms – Register a new farm (Strictly FARMER only)
 router.post(
   '/',
   authenticate,
+  authorize('FARMER'),
   [
     body('farmName')
       .trim()
@@ -23,15 +24,15 @@ router.post(
       .notEmpty()
       .withMessage('woredaId must be a non-empty string'),
     body('polygonGeojson')
-      .optional()
+      .notEmpty()
+      .withMessage('polygonGeojson GIS boundary is required to register a farm plot')
       .isObject()
       .withMessage('polygonGeojson must be a GeoJSON object'),
     body('polygonGeojson.type')
-      .optional()
+      .notEmpty()
       .isIn(['Polygon', 'Feature'])
       .withMessage('polygonGeojson.type must be "Polygon" or "Feature"'),
     body('polygonGeojson.coordinates')
-      .optional()
       .isArray({ min: 1 })
       .withMessage('polygonGeojson.coordinates must be an array of rings'),
     body('latitude')
@@ -67,6 +68,7 @@ router.get('/:id', authenticate, controller.getFarmDetails);
 router.put(
   '/:id',
   authenticate,
+  authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'),
   [
     body('farmName').optional().trim().notEmpty().withMessage('farmName cannot be empty').isLength({ max: 200 }),
     body('primaryCrop').optional().isString().trim().notEmpty(),
@@ -84,6 +86,7 @@ router.put(
 router.patch(
   '/:id',
   authenticate,
+  authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'),
   [
     body('farmName').optional().trim().notEmpty().withMessage('farmName cannot be empty').isLength({ max: 200 }),
     body('primaryCrop').optional().isString().trim().notEmpty(),
@@ -98,8 +101,18 @@ router.patch(
   controller.updateFarm
 );
 
+// Planning & Agronomic Management Routes
+router.post('/:id/planning/rotation', authenticate, controller.authorizeFarmAccess, controller.generateCropRotation);
+router.get('/:id/planning/rotation', authenticate, controller.authorizeFarmAccess, controller.generateCropRotation);
+router.get('/:id/planning/inputs', authenticate, controller.authorizeFarmAccess, controller.calculateInputs);
+router.get('/:id/planning/calendar', authenticate, controller.authorizeFarmAccess, controller.getPlantingCalendar);
+
+// Analytics & Peer Benchmarking Routes
+router.get('/:id/analytics', authenticate, controller.authorizeFarmAccess, controller.getFarmAnalytics);
+router.get('/:id/benchmarks', authenticate, controller.authorizeFarmAccess, controller.getFarmBenchmarks);
+
 // DELETE /api/v1/farms/:id – Delete a farm plot
-router.delete('/:id', authenticate, controller.deleteFarm);
+router.delete('/:id', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'), controller.deleteFarm);
 
 module.exports = router;
 

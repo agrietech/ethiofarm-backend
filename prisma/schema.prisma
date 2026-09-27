@@ -56,6 +56,11 @@ enum HazardType {
   VEGETATION_STRESS
   FROST
   HEAT_STRESS
+  EARTHQUAKE
+  LANDSLIDE
+  VOLCANIC
+  SOIL_DEGRADATION
+  ANIMAL_DISEASE
 }
 
 enum DeliveryChannel {
@@ -90,6 +95,21 @@ model User {
   verificationToken     String?
   phoneVerificationToken String?
   phoneVerificationExpires DateTime?
+  
+  // MFA fields
+  mfaEnabled            Boolean           @default(false)
+  totpSecret            String?           // Encrypted TOTP secret
+  backupCodes           String[]          @default([])
+  mfaMethod             String?           // 'TOTP', 'SMS', 'EMAIL'
+  
+  // Security fields
+  accountLocked         Boolean           @default(false)
+  lockedAt              DateTime?
+  lockReason            String?
+  lastLoginAt           DateTime?
+  lastLoginIp           String?
+  
+  // Location fields
   regionId              String?
   region                Region?           @relation(fields: [regionId], references: [id], onDelete: SetNull)
   zoneId                String?
@@ -108,6 +128,16 @@ model User {
   alertLogs             AlertDeliveryLog[]
   roleRequests          RoleRequest[]     @relation("RoleRequestUser")
   reviewedRequests      RoleRequest[]     @relation("RoleRequestReviewer")
+  
+  // New relations for PBAC
+  permissions           UserPermission[]
+  resourceAccesses      ResourceAccess[]
+  grantedPermissions    UserPermission[]  @relation("PermissionGrants")
+  grantedAccesses       ResourceAccess[]  @relation("AccessGrants")
+  sessions              UserSession[]
+  loginAttempts         LoginAttempt[]
+  otpVerifications      OTPVerification[]
+  
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 
@@ -116,6 +146,7 @@ model User {
   @@index([regionId])
   @@index([zoneId])
   @@index([woredaId])
+  @@index([accountLocked])
 }
 
 model Region {
@@ -162,6 +193,10 @@ model Woreda {
   alerts           Alert[]
   advisories       Advisory[]
   alertSubscriptions AlertSubscription[]
+  livestockHerds   LivestockHerd[]
+  diseaseOutbreaks AnimalDiseaseOutbreak[]
+  vaccinationRecords VaccinationRecord[]
+  alertCampaigns   AlertCampaign[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
@@ -216,6 +251,9 @@ model Farm {
   sensors          Sensor[]
   diseaseDiagnoses DiseaseDiagnosis[]
   aiInsights       AIInsight[]
+  cropRotationPlans CropRotationPlan[]
+  activities       FarmActivity[]
+  yieldRecords     FarmYieldRecord[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
@@ -300,6 +338,11 @@ model RiskAssessment {
   floodScore       Float?
   locustScore      Float?
   vegetationScore  Float?
+  earthquakeScore  Float?            // Seismic hazard score 0.0-1.0
+  landslideScore   Float?            // Landslide susceptibility 0.0-1.0
+  volcanicScore    Float?            // Volcanic proximity score 0.0-1.0
+  soilDegradationScore Float?        // RUSLE erosion severity 0.0-1.0
+  animalDiseaseScore Float?          // Animal health risk 0.0-1.0
   compositeScore   Float?            // Weighted aggregate of all hazard scores
   alertLevel       String?           // GREEN, YELLOW, ORANGE, RED, CRITICAL
   spi30Day         Float?            // Standardized Precipitation Index 30-day
@@ -583,3 +626,300 @@ model AlertSubscription {
   @@index([phoneNumber])
 }
 
+// ── Animal Health & Livestock Surveillance Models ─────────────────────────────
+
+model LivestockHerd {
+  id               String            @id @default(uuid())
+  woredaId         String
+  woreda           Woreda            @relation(fields: [woredaId], references: [id], onDelete: Cascade)
+  kebeleId         String?
+  userId           String?
+  animalType       String            // CATTLE, SHEEP, GOAT, POULTRY, CAMEL, EQUINE
+  breedName        String?           // Ethiopian breed name
+  headCount        Int               @default(0)
+  healthStatus     String            @default("HEALTHY") // HEALTHY, SICK, QUARANTINED, VACCINATED
+  lastVetCheckDate DateTime?
+  notes            String?
+  registeredAt     DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([woredaId])
+  @@index([animalType])
+  @@index([userId])
+}
+
+model AnimalDiseaseOutbreak {
+  id               String            @id @default(uuid())
+  woredaId         String
+  woreda           Woreda            @relation(fields: [woredaId], references: [id], onDelete: Cascade)
+  kebeleId         String?
+  diseaseName      String            // e.g. 'Foot-and-Mouth Disease', 'Anthrax'
+  diseaseId        String?           // Reference to diseaseDatabase.js ID
+  animalType       String            // CATTLE, SHEEP, GOAT, POULTRY, etc.
+  confirmedCases   Int               @default(0)
+  suspectedCases   Int               @default(0)
+  deaths           Int               @default(0)
+  severity         String            @default("MODERATE") // LOW, MODERATE, HIGH, CRITICAL
+  status           String            @default("ACTIVE")   // ACTIVE, CONTAINED, RESOLVED
+  latitude         Float?
+  longitude        Float?
+  reportedBy       String?
+  notes            String?
+  reportedAt       DateTime          @default(now())
+  resolvedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([woredaId, status])
+  @@index([diseaseName])
+  @@index([animalType])
+  @@index([reportedAt])
+}
+
+model VaccinationRecord {
+  id               String            @id @default(uuid())
+  woredaId         String
+  woreda           Woreda            @relation(fields: [woredaId], references: [id], onDelete: Cascade)
+  herdId           String?
+  animalType       String            // CATTLE, SHEEP, GOAT, POULTRY, etc.
+  vaccineName      String            // e.g. 'FMD Trivalent', 'PPR', 'Newcastle HB1'
+  dosesAdministered Int              @default(0)
+  targetPopulation Int               @default(0)
+  coveragePercent  Float?            // 0.0 - 100.0
+  campaignDate     DateTime
+  nextDueDate      DateTime?
+  administeredBy   String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([woredaId])
+  @@index([animalType])
+  @@index([campaignDate])
+  @@index([vaccineName])
+}
+
+
+
+// ── Permission-Based Access Control (PBAC) Models ─────────────────────────────
+
+model Permission {
+  id          String           @id @default(uuid())
+  code        String           @unique // e.g., "farms.create", "alerts.broadcast"
+  name        String
+  description String?
+  resource    String           // "farms", "alerts", "sensors", etc.
+  action      String           // "create", "read", "update", "delete", "broadcast"
+  scope       String           @default("OWN") // "OWN", "WOREDA", "ZONE", "REGION", "NATIONAL"
+  roles       RolePermission[]
+  userGrants  UserPermission[]
+  createdAt   DateTime         @default(now())
+  
+  @@index([resource, action])
+  @@index([scope])
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  granted      Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  
+  @@unique([role, permissionId])
+  @@index([role])
+}
+
+model UserPermission {
+  id           String      @id @default(uuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  granted      Boolean     @default(true)
+  scope        String?     // Optional override: specific woreda/zone/region
+  expiresAt    DateTime?   // Time-based permissions
+  grantedById  String?
+  grantedBy    User?       @relation("PermissionGrants", fields: [grantedById], references: [id], onDelete: SetNull)
+  grantedAt    DateTime    @default(now())
+  reason       String?
+  
+  @@unique([userId, permissionId])
+  @@index([userId, expiresAt])
+  @@index([permissionId])
+}
+
+model ResourceAccess {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resourceType String    // "Farm", "Sensor", "Alert"
+  resourceId   String
+  accessLevel  String    // "READ", "WRITE", "ADMIN"
+  grantedById  String?
+  grantedBy    User?     @relation("AccessGrants", fields: [grantedById], references: [id], onDelete: SetNull)
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+  
+  @@unique([userId, resourceType, resourceId])
+  @@index([resourceType, resourceId])
+  @@index([userId, expiresAt])
+}
+
+// ── Session Management Models ──────────────────────────────────────────────────
+
+model UserSession {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionToken  String    @unique
+  device        String?   // Device type
+  browser       String?
+  os            String?
+  ipAddress     String?
+  location      Json?     // { country, city, lat, lng }
+  isActive      Boolean   @default(true)
+  lastActivity  DateTime  @default(now())
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  
+  @@index([userId, isActive])
+  @@index([sessionToken])
+  @@index([expiresAt])
+}
+
+model LoginAttempt {
+  id          String    @id @default(uuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  identifier  String    // Email or phone
+  success     Boolean
+  ipAddress   String?
+  userAgent   String?
+  location    Json?
+  failReason  String?
+  attemptedAt DateTime  @default(now())
+  
+  @@index([identifier, attemptedAt])
+  @@index([userId, attemptedAt])
+  @@index([success])
+}
+
+model OTPVerification {
+  id          String    @id @default(uuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  phoneNumber String?
+  email       String?
+  code        String    // Hashed OTP code
+  type        String    // 'LOGIN', 'MFA', 'PASSWORD_RESET', 'PHONE_VERIFY'
+  attempts    Int       @default(0)
+  verified    Boolean   @default(false)
+  expiresAt   DateTime
+  verifiedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  
+  @@index([phoneNumber, expiresAt])
+  @@index([email, expiresAt])
+  @@index([userId, type])
+}
+
+// ── Alert Campaign & Targeting Models ──────────────────────────────────────────
+
+model AlertCampaign {
+  id               String              @id @default(uuid())
+  woredaId         String
+  woreda           Woreda              @relation(fields: [woredaId], references: [id], onDelete: Cascade)
+  hazardType       HazardType
+  severity         RiskLevel
+  titleEn          String
+  titleAm          String
+  titleOm          String?
+  messageEn        String
+  messageAm        String
+  messageOm        String?
+  targeting        Json?               // Targeting criteria
+  audienceSize     Int                 @default(0)
+  deliveryChannels DeliveryChannel[]
+  status           String              @default("DRAFT") // DRAFT, SCHEDULED, ACTIVE, DISPATCHED, COMPLETED
+  scheduledFor     DateTime?
+  dispatchedAt     DateTime?
+  completedAt      DateTime?
+  deliveryLogs     CampaignDeliveryLog[]
+  createdBy        String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  
+  @@index([woredaId, status])
+  @@index([status, scheduledFor])
+}
+
+model CampaignDeliveryLog {
+  id         String        @id @default(uuid())
+  campaignId String
+  campaign   AlertCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId     String
+  channel    DeliveryChannel
+  status     String        @default("PENDING") // PENDING, SENT, DELIVERED, FAILED, READ
+  sentAt     DateTime?
+  deliveredAt DateTime?
+  readAt     DateTime?
+  failReason String?
+  metadata   Json?
+  createdAt  DateTime      @default(now())
+  
+  @@index([campaignId, status])
+  @@index([userId, createdAt])
+}
+
+// ── Farm Planning Models ───────────────────────────────────────────────────────
+
+model CropRotationPlan {
+  id        String   @id @default(uuid())
+  farmId    String
+  farm      Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  years     Int      @default(3)
+  plan      Json     // Array of rotation plan objects
+  status    String   @default("DRAFT") // DRAFT, ACTIVE, COMPLETED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([farmId, status])
+}
+
+model FarmActivity {
+  id           String    @id @default(uuid())
+  farmId       String
+  farm         Farm      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  activityType String    // LAND_PREP, PLANTING, WEEDING, FERTILIZING, HARVESTING, etc.
+  status       String    @default("PLANNED") // PLANNED, IN_PROGRESS, COMPLETED, CANCELLED
+  scheduledDate DateTime
+  completedDate DateTime?
+  notes        String?
+  cost         Float?
+  laborHours   Float?
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  
+  @@index([farmId, scheduledDate])
+  @@index([status])
+}
+
+model FarmYieldRecord {
+  id          String   @id @default(uuid())
+  farmId      String
+  farm        Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  cropType    String
+  season      String   // MEHER, BELG
+  year        Int
+  yieldQT     Float    // Yield in Quintals
+  yieldPerHa  Float?   // Yield per hectare
+  quality     String?  // Grade or quality rating
+  harvestDate DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+  
+  @@index([farmId, year])
+  @@index([cropType, season])
+}

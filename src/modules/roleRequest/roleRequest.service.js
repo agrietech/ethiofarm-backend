@@ -28,19 +28,17 @@ const ROLE_HIERARCHY = {
  * Submit a new role upgrade request
  */
 async function submitRoleRequest(userId, requestData) {
-  const {
-    requestedRole,
-    regionId,
-    regionName,
-    zoneId,
-    zoneName,
-    woredaId,
-    woredaName,
-    kebeleName,
-    staffIdNumber,
-    organizationName,
-    justification,
-  } = requestData;
+  const requestedRole = requestData.requestedRole;
+  let regionId = requestData.regionId;
+  let regionName = requestData.regionName || requestData.jurisdictionRegion;
+  let zoneId = requestData.zoneId;
+  let zoneName = requestData.zoneName || requestData.jurisdictionZone;
+  let woredaId = requestData.woredaId;
+  let woredaName = requestData.woredaName || requestData.jurisdictionWoreda;
+  const kebeleName = requestData.kebeleName || null;
+  const staffIdNumber = requestData.staffIdNumber;
+  const organizationName = requestData.organizationName;
+  const justification = requestData.justification || requestData.reason || null;
 
   // Validate requestable role
   if (!REQUESTABLE_ROLES.includes(requestedRole)) {
@@ -82,6 +80,71 @@ async function submitRoleRequest(userId, requestData) {
   // Validate required fields
   if (!staffIdNumber || !organizationName) {
     throw new BadRequestError('Staff ID number and organization name are required');
+  }
+
+  // Auto-resolve administrative boundary hierarchy from database if only names or IDs were provided
+  if (woredaId || woredaName) {
+    try {
+      const woredaRecord = await prisma.woreda.findFirst({
+        where: {
+          OR: [
+            ...(woredaId ? [{ id: woredaId }] : []),
+            ...(woredaName ? [{ nameEn: { equals: woredaName, mode: 'insensitive' } }, { nameAm: woredaName }] : []),
+          ],
+        },
+        include: {
+          zone: {
+            include: { region: true },
+          },
+        },
+      });
+
+      if (woredaRecord) {
+        woredaId = woredaRecord.id;
+        woredaName = woredaRecord.nameEn;
+        zoneId = zoneId || woredaRecord.zoneId;
+        zoneName = zoneName || woredaRecord.zone?.nameEn;
+        regionId = regionId || woredaRecord.zone?.regionId;
+        regionName = regionName || woredaRecord.zone?.region?.nameEn;
+      }
+    } catch (_) {}
+  }
+
+  if (zoneId || zoneName) {
+    try {
+      const zoneRecord = await prisma.zone.findFirst({
+        where: {
+          OR: [
+            ...(zoneId ? [{ id: zoneId }] : []),
+            ...(zoneName ? [{ nameEn: { equals: zoneName, mode: 'insensitive' } }, { nameAm: zoneName }] : []),
+          ],
+        },
+        include: { region: true },
+      });
+      if (zoneRecord) {
+        zoneId = zoneRecord.id;
+        zoneName = zoneRecord.nameEn;
+        regionId = regionId || zoneRecord.regionId;
+        regionName = regionName || zoneRecord.region?.nameEn;
+      }
+    } catch (_) {}
+  }
+
+  if (regionId || regionName) {
+    try {
+      const regionRecord = await prisma.region.findFirst({
+        where: {
+          OR: [
+            ...(regionId ? [{ id: regionId }, { code: regionId }] : []),
+            ...(regionName ? [{ nameEn: { equals: regionName, mode: 'insensitive' } }, { nameAm: regionName }, { code: regionName }] : []),
+          ],
+        },
+      });
+      if (regionRecord) {
+        regionId = regionRecord.id;
+        regionName = regionRecord.nameEn;
+      }
+    } catch (_) {}
   }
 
   // Region, zone and woreda are all NOT NULL on RoleRequest, and reviewers are

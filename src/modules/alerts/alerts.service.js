@@ -102,83 +102,81 @@ async function createAlert({
     ? `${resolvedMessageEn} ${cropCalendar.contextNotice}`.trim()
     : resolvedMessageEn;
 
-  const alert = await prisma.alert.create({
-    data: {
-      woredaId: resolvedWoredaId,
-      hazardType,
-      severity: effectiveSeverity,
-      headline: headline || resolvedTitleEn,
-      status: 'ACTIVE',
-      titleEn: resolvedTitleEn,
-      titleAm: titleAm || '',
-      titleOm: titleOm || null,
-      messageEn: finalMessageEn,
-      messageAm: messageAm || '',
-      messageOm: messageOm || null,
-      priority: typeof priority === 'number' ? priority : 1,
-      actionItems: actionItems || [],
-      expiresAt: expiresAt ? new Date(expiresAt) : null,
-      targetPhones: Array.isArray(targetPhones) ? targetPhones : [],
-    },
-    include: {
-      woreda: { select: { id: true, nameEn: true, nameAm: true } },
-    },
+  // Look up recipients in the target woreda
+  const usersInWoreda = await prisma.user.findMany({
+    where: { woredaId: resolvedWoredaId },
+    select: { id: true },
   });
 
-  // Automatically create a linked Advisory record
-  try {
-    await prisma.advisory.create({
+  // ACID Transaction: Create Alert, linked Advisory, and in-app Notifications atomically
+  const alert = await prisma.$transaction(async (tx) => {
+    const newAlert = await tx.alert.create({
       data: {
-        alertId: alert.id,
         woredaId: resolvedWoredaId,
         hazardType,
         severity: effectiveSeverity,
-        titleEn: alert.titleEn,
-        titleAm: alert.titleAm || alert.titleEn,
-        titleOm: alert.titleOm || null,
-        adviceEn: alert.messageEn,
-        adviceAm: alert.messageAm || alert.messageEn,
-        adviceOm: alert.messageOm || null,
-        actionItems: alert.actionItems,
-        validUntil: alert.expiresAt,
+        headline: headline || resolvedTitleEn,
+        status: 'ACTIVE',
+        titleEn: resolvedTitleEn,
+        titleAm: titleAm || '',
+        titleOm: titleOm || null,
+        messageEn: finalMessageEn,
+        messageAm: messageAm || '',
+        messageOm: messageOm || null,
+        priority: typeof priority === 'number' ? priority : 1,
+        actionItems: actionItems || [],
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        targetPhones: Array.isArray(targetPhones) ? targetPhones : [],
+      },
+      include: {
+        woreda: { select: { id: true, nameEn: true, nameAm: true } },
+      },
+    });
+
+    await tx.advisory.create({
+      data: {
+        alertId: newAlert.id,
+        woredaId: resolvedWoredaId,
+        hazardType,
+        severity: effectiveSeverity,
+        titleEn: newAlert.titleEn,
+        titleAm: newAlert.titleAm || newAlert.titleEn,
+        titleOm: newAlert.titleOm || null,
+        adviceEn: newAlert.messageEn,
+        adviceAm: newAlert.messageAm || newAlert.messageEn,
+        adviceOm: newAlert.messageOm || null,
+        actionItems: newAlert.actionItems,
+        validUntil: newAlert.expiresAt,
         status: 'ACTIVE',
       },
     });
-  } catch (advErr) {
-    logger.warn(`[Alerts] Auto-advisory creation notice: ${advErr.message}`);
-  }
-
-  // Dispatch notifications to registered users in this woreda
-  try {
-    const usersInWoreda = await prisma.user.findMany({
-      where: { woredaId },
-      select: { id: true },
-    });
 
     if (usersInWoreda.length > 0) {
-      await prisma.notification.createMany({
+      await tx.notification.createMany({
         data: usersInWoreda.map((u) => ({
           userId: u.id,
-          titleEn: `🚨 ${alert.titleEn}`,
-          titleAm: `🚨 ${alert.titleAm || alert.titleEn}`,
-          bodyEn: alert.messageEn,
-          bodyAm: alert.messageAm || alert.messageEn,
+          titleEn: `🚨 ${newAlert.titleEn}`,
+          titleAm: `🚨 ${newAlert.titleAm || newAlert.titleEn}`,
+          bodyEn: newAlert.messageEn,
+          bodyAm: newAlert.messageAm || newAlert.messageEn,
           type: 'ALERT',
-          metadata: { alertId: alert.id, hazardType: alert.hazardType, severity: alert.severity },
+          metadata: { alertId: newAlert.id, hazardType: newAlert.hazardType, severity: newAlert.severity },
         })),
       });
-      logger.info(`[Alerts] Dispatched notifications to ${usersInWoreda.length} users in woreda ${woredaId}`);
     }
-  } catch (notifErr) {
-    logger.warn(`[Alerts] Notification dispatch notice: ${notifErr.message}`);
-  }
 
+    return newAlert;
+  });
+
+  logger.info(`[Alerts] Alert ${alert.id} atomically persisted with advisory and ${usersInWoreda.length} notifications`);
+
+  // Asynchronous Post-Commit External Delivery Side Effects
   // 1. Dispatch Push Notifications via Firebase Cloud Messaging
   try {
     const pushTitle = alert.titleAm || alert.titleEn || alert.headline;
     const pushBody = alert.messageAm || alert.messageEn || 'New agricultural advisory alert.';
     await sendPushNotification({
-      topic: `woreda_${woredaId}`,
+      topic: `woreda_${resolvedWoredaId}`,
       title: `⚠️ ${pushTitle}`,
       body: pushBody,
       data: {

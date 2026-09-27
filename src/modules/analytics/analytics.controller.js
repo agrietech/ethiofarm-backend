@@ -17,9 +17,12 @@ async function getDashboardSummary(req, res, next) {
   }
 }
 
-async function getRegionalBreakdown(_req, res, next) {
+async function getRegionalBreakdown(req, res, next) {
   try {
-    const data = await analyticsService.getRegionalBreakdown();
+    const user = req.user || {};
+    const role = (user.role || '').toUpperCase();
+    const regionId = role === 'REGIONAL_OFFICER' ? user.regionId : null;
+    const data = await analyticsService.getRegionalBreakdown(regionId);
     res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
@@ -28,7 +31,13 @@ async function getRegionalBreakdown(_req, res, next) {
 
 async function getTemporalTrends(req, res, next) {
   try {
-    const { timeframe, woredaId, includeAi, language } = req.query;
+    let { timeframe, woredaId, includeAi, language } = req.query;
+    const user = req.user;
+    if (user && !['ADMIN', 'RESEARCHER'].includes(user.role)) {
+      if (user.role === 'FARMER' || user.role === 'DEVELOPMENT_AGENT' || user.role === 'WOREDA_OFFICER') {
+        woredaId = user.woredaId;
+      }
+    }
     const data = await analyticsService.getTemporalTrends({
       timeframe,
       woredaId,
@@ -43,7 +52,13 @@ async function getTemporalTrends(req, res, next) {
 
 async function getAgronomicAdvisories(req, res, next) {
   try {
-    const { cropType, season, woredaId } = req.query;
+    let { cropType, season, woredaId } = req.query;
+    const user = req.user;
+    if (user && !['ADMIN', 'RESEARCHER'].includes(user.role)) {
+      if (user.role === 'FARMER' || user.role === 'DEVELOPMENT_AGENT' || user.role === 'WOREDA_OFFICER') {
+        woredaId = user.woredaId;
+      }
+    }
     const data = await analyticsService.getAgronomicAdvisories({
       cropType,
       season,

@@ -4,9 +4,9 @@
 // Dry / Bega:          October–February (months 10–2)
 
 const SEASON_WEIGHTS = {
-  KIREMT: { drought: 0.20, flood: 0.40, locust: 0.25, vegetation: 0.15 },   // June–Sep: flood peaks
-  BELG:   { drought: 0.30, flood: 0.25, locust: 0.30, vegetation: 0.15 },   // Mar–May: balanced, locust risk
-  DRY:    { drought: 0.45, flood: 0.10, locust: 0.25, vegetation: 0.20 },   // Oct–Feb: drought dominant
+  KIREMT: { drought: 0.15, flood: 0.25, locust: 0.15, vegetation: 0.10, earthquake: 0.10, landslide: 0.10, volcanic: 0.05, erosion: 0.05, animalDisease: 0.05 },
+  BELG:   { drought: 0.20, flood: 0.15, locust: 0.20, vegetation: 0.10, earthquake: 0.10, landslide: 0.05, volcanic: 0.05, erosion: 0.10, animalDisease: 0.05 },
+  DRY:    { drought: 0.30, flood: 0.05, locust: 0.15, vegetation: 0.15, earthquake: 0.10, landslide: 0.05, volcanic: 0.05, erosion: 0.05, animalDisease: 0.10 },
 };
 
 const DEFAULT_WEIGHTS = SEASON_WEIGHTS.BELG; // fallback (exported for backward compat)
@@ -41,21 +41,38 @@ function calculateCompositeRisk(hazardScores = {}, customWeights = {}) {
   const sFlood = Math.max(0, Math.min(1, hazardScores.flood || 0));
   const sLocust = Math.max(0, Math.min(1, hazardScores.locust || 0));
   const sVeg = Math.max(0, Math.min(1, hazardScores.vegetation || 0));
+  const sEarthquake = Math.max(0, Math.min(1, hazardScores.earthquake || 0));
+  const sLandslide = Math.max(0, Math.min(1, hazardScores.landslide || 0));
+  const sVolcanic = Math.max(0, Math.min(1, hazardScores.volcanic || 0));
+  const sErosion = Math.max(0, Math.min(1, hazardScores.erosion || 0));
+  const sAnimalDisease = Math.max(0, Math.min(1, hazardScores.animalDisease || 0));
 
   const weightedSum =
-    sDrought * weights.drought +
-    sFlood * weights.flood +
-    sLocust * weights.locust +
-    sVeg * weights.vegetation;
+    sDrought * (weights.drought || 0) +
+    sFlood * (weights.flood || 0) +
+    sLocust * (weights.locust || 0) +
+    sVeg * (weights.vegetation || 0) +
+    sEarthquake * (weights.earthquake || 0) +
+    sLandslide * (weights.landslide || 0) +
+    sVolcanic * (weights.volcanic || 0) +
+    sErosion * (weights.erosion || 0) +
+    sAnimalDisease * (weights.animalDisease || 0);
 
-  const totalWeight = weights.drought + weights.flood + weights.locust + weights.vegetation;
-  const compositeScore = Math.round((weightedSum / totalWeight) * 100) / 100;
+  const totalWeight = (weights.drought || 0) + (weights.flood || 0) + (weights.locust || 0) +
+    (weights.vegetation || 0) + (weights.earthquake || 0) + (weights.landslide || 0) +
+    (weights.volcanic || 0) + (weights.erosion || 0) + (weights.animalDisease || 0);
+  const compositeScore = Math.round((weightedSum / (totalWeight || 1)) * 100) / 100;
 
   const drivers = [
     { name: 'DROUGHT', score: sDrought },
     { name: 'FLOOD', score: sFlood },
     { name: 'LOCUST', score: sLocust },
     { name: 'VEGETATION_STRESS', score: sVeg },
+    { name: 'EARTHQUAKE', score: sEarthquake },
+    { name: 'LANDSLIDE', score: sLandslide },
+    { name: 'VOLCANIC', score: sVolcanic },
+    { name: 'SOIL_DEGRADATION', score: sErosion },
+    { name: 'ANIMAL_DISEASE', score: sAnimalDisease },
   ];
   drivers.sort((a, b) => b.score - a.score);
   const primaryThreat = drivers[0].score > 0.2 ? drivers[0].name : 'NONE';
@@ -66,10 +83,15 @@ function calculateCompositeRisk(hazardScores = {}, customWeights = {}) {
     primaryThreat,
     season: weights.season || 'CUSTOM',
     breakdown: {
-      drought: { score: sDrought, weight: weights.drought },
-      flood: { score: sFlood, weight: weights.flood },
-      locust: { score: sLocust, weight: weights.locust },
-      vegetation: { score: sVeg, weight: weights.vegetation },
+      drought: { score: sDrought, weight: weights.drought || 0 },
+      flood: { score: sFlood, weight: weights.flood || 0 },
+      locust: { score: sLocust, weight: weights.locust || 0 },
+      vegetation: { score: sVeg, weight: weights.vegetation || 0 },
+      earthquake: { score: sEarthquake, weight: weights.earthquake || 0 },
+      landslide: { score: sLandslide, weight: weights.landslide || 0 },
+      volcanic: { score: sVolcanic, weight: weights.volcanic || 0 },
+      erosion: { score: sErosion, weight: weights.erosion || 0 },
+      animalDisease: { score: sAnimalDisease, weight: weights.animalDisease || 0 },
     },
   };
 }

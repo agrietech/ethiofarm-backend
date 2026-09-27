@@ -99,7 +99,9 @@ function authorizeWoredaScope(paramName = 'woredaId') {
     }
 
     const { role, woredaId, zoneId, regionId } = req.user;
-    if (['ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER', 'ZONAL_OFFICER'].includes(role)) {
+    // Only national-scope roles bypass geographic checks. Zonal and regional
+    // officers are validated below against the requested woreda's parent.
+    if (['ADMIN', 'RESEARCHER'].includes(role)) {
       return next();
     }
 
@@ -142,8 +144,13 @@ function authorizeWoredaScope(paramName = 'woredaId') {
               error: { message: `Woreda '${requestedWoreda}' is outside your assigned zone jurisdiction`, code: 'OUT_OF_SCOPE' },
             });
           }
-        } catch (dbErr) {
-          return res.status(500).json({ success: false, error: { message: dbErr.message } });
+        } catch (_) {
+          // Scope cannot be established; deny rather than accidentally
+          // granting cross-zone access during a data-store failure.
+          return res.status(403).json({
+            success: false,
+            error: { message: 'Unable to verify woreda jurisdiction', code: 'OUT_OF_SCOPE' },
+          });
         }
       }
       return next();
@@ -170,8 +177,11 @@ function authorizeWoredaScope(paramName = 'woredaId') {
               error: { message: `Woreda '${requestedWoreda}' is outside your assigned regional jurisdiction`, code: 'OUT_OF_SCOPE' },
             });
           }
-        } catch (dbErr) {
-          return res.status(500).json({ success: false, error: { message: dbErr.message } });
+        } catch (_) {
+          return res.status(403).json({
+            success: false,
+            error: { message: 'Unable to verify regional jurisdiction', code: 'OUT_OF_SCOPE' },
+          });
         }
       }
       return next();
@@ -192,7 +202,9 @@ function authorizeZoneScope(paramName = 'zoneId') {
     }
 
     const { role, zoneId, regionId } = req.user;
-    if (['ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER'].includes(role)) {
+    // Regional officers still need a parent-region check below; only
+    // national-scope roles are unrestricted.
+    if (['ADMIN', 'RESEARCHER'].includes(role)) {
       return next();
     }
 
@@ -233,8 +245,11 @@ function authorizeZoneScope(paramName = 'zoneId') {
               error: { message: `Zone '${requestedZone}' is outside your assigned regional jurisdiction`, code: 'OUT_OF_SCOPE' },
             });
           }
-        } catch (dbErr) {
-          return res.status(500).json({ success: false, error: { message: dbErr.message } });
+        } catch (_) {
+          return res.status(403).json({
+            success: false,
+            error: { message: 'Unable to verify regional jurisdiction', code: 'OUT_OF_SCOPE' },
+          });
         }
       }
       return next();

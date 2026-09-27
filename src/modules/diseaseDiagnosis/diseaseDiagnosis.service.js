@@ -6,7 +6,8 @@ const plantIdClient = require('../../ingestion/plantIdClient');
 const plantNetClient = require('../../ingestion/plantNetClient');
 const perenualClient = require('../../ingestion/perenualClient');
 const logger = require('../../utils/logger');
-const { NotFoundError, ForbiddenError } = require('../../utils/errors');
+const { NotFoundError } = require('../../utils/errors');
+const { assertResourceInScope, isNationalScope, buildDiagnosisScope } = require('../../middleware/scope-filter.utils');
 
 /**
  * Perform Multi-Engine AI Crop Disease Diagnosis:
@@ -14,12 +15,12 @@ const { NotFoundError, ForbiddenError } = require('../../utils/errors');
  */
 async function diagnoseCropImage({ farmId, cropType, imageUrl, imageFile, imageBase64: rawBase64, language = 'en', user }) {
   if (farmId && user && isConnected()) {
-    const role = (user.role || '').toUpperCase();
-    if (role === 'FARMER') {
-      const farm = await prisma.farm.findUnique({ where: { id: farmId }, select: { userId: true } });
-      if (farm && farm.userId !== user.id && farmId !== 'farm_demo_01') {
-        throw new ForbiddenError('Access denied: You can only submit diagnoses for your own farm');
-      }
+    const farm = await prisma.farm.findUnique({
+      where: { id: farmId },
+      include: { woreda: { include: { zone: true } } },
+    });
+    if (farm) {
+      assertResourceInScope(user, farm, 'farm');
     }
   }
 
@@ -283,31 +284,32 @@ async function diagnoseCropImage({ farmId, cropType, imageUrl, imageFile, imageB
       } catch (_) {}
     }
 
-    const saved = await prisma.diseaseDiagnosis.create({
-      data: {
-        farmId: validFarmId,
-        cropType: cropType || resolvedCropEn,
-        cropIdentified: resolvedCropEn,
-        imageUrl: uploadPath || '/uploads/diagnoses/crop_sample.jpg',
-        diseaseName: resolvedDiseaseEn,
-        pathogen: resolvedPathogen,
-        severity: resolvedSeverity,
-        confidenceScore: Math.round(resolvedConfidence * 100) / 100,
-        symptomsEn,
-        symptomsAm,
-        treatmentEn,
-        treatmentAm,
-        treatmentOm,
-        preventionEn,
-        preventionAm,
-        rawResponse,
-      },
-    });
+    const validUserId = user && user.id ? user.id : null;
 
-    // Also persist raw Gemini reasoning into AIInsight table
-    try {
-      await prisma.aIInsight.create({
+    const [saved] = await prisma.$transaction([
+      prisma.diseaseDiagnosis.create({
         data: {
+          farmId: validFarmId,
+          cropType: cropType || resolvedCropEn,
+          cropIdentified: resolvedCropEn,
+          imageUrl: uploadPath || '/uploads/diagnoses/crop_sample.jpg',
+          diseaseName: resolvedDiseaseEn,
+          pathogen: resolvedPathogen,
+          severity: resolvedSeverity,
+          confidenceScore: Math.round(resolvedConfidence * 100) / 100,
+          symptomsEn,
+          symptomsAm,
+          treatmentEn,
+          treatmentAm,
+          treatmentOm,
+          preventionEn,
+          preventionAm,
+          rawResponse,
+        },
+      }),
+      prisma.aIInsight.create({
+        data: {
+          userId: validUserId,
           prompt: `Dual AI crop diagnosis for crop=${cropType || resolvedCropEn}`,
           model: 'Plant.id + Google Gemini 2.5 Flash',
           feature: 'DISEASE_DIAGNOSIS',
@@ -315,10 +317,8 @@ async function diagnoseCropImage({ farmId, cropType, imageUrl, imageFile, imageB
           confidenceScore: Math.round(resolvedConfidence * 100) / 100,
           farmId: validFarmId,
         },
-      });
-    } catch (aiLogErr) {
-      logger.warn(`[DiseaseDiagnosis] AIInsight logging notice: ${aiLogErr.message}`);
-    }
+      }),
+    ]);
 
     return {
       id: saved.id,
@@ -390,62 +390,12 @@ async function diagnoseCropImage({ farmId, cropType, imageUrl, imageFile, imageB
  * Retrieve all past diagnoses with optional filters and strict jurisdictional scoping
  */
 async function getAllDiagnoses({ farmId, cropType, user } = {}) {
-  const where = {};
+  let where = {};
+  if (user) {
+    where = buildDiagnosisScope(user);
+  }
   if (farmId) where.farmId = farmId;
   if (cropType) where.cropType = cropType;
-
-  if (user && isConnected()) {
-    const role = (user.role || 'FARMER').toUpperCase();
-    if (role === 'FARMER') {
-      try {
-        const userFarms = await prisma.farm.findMany({ where: { userId: user.id }, select: { id: true } });
-        const userFarmIds = userFarms.map((f) => f.id);
-        if (userFarmIds.length > 0) {
-          where.OR = [
-            { farmId: { in: userFarmIds } },
-            { farmId: null },
-            { farmId: 'farm_demo_01' },
-          ];
-        } else {
-          // Farmer has no farms registered yet: show diagnoses submitted without farm + benchmark demo records
-          where.OR = [
-            { farmId: null },
-            { farmId: 'farm_demo_01' },
-          ];
-        }
-      } catch (_) {
-        where.OR = [
-          { farm: { userId: user.id } },
-          { farmId: null },
-        ];
-      }
-    } else if (role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER') {
-      if (user.woredaId) {
-        where.OR = [
-          { farm: { woredaId: user.woredaId } },
-          { farmId: null },
-          { farmId: 'farm_demo_01' },
-        ];
-      }
-      // If woredaId is not yet assigned in profile, show all accessible diagnoses
-    } else if (role === 'ZONAL_OFFICER') {
-      if (user.zoneId) {
-        where.OR = [
-          { farm: { woreda: { zoneId: user.zoneId } } },
-          { farmId: null },
-          { farmId: 'farm_demo_01' },
-        ];
-      }
-    } else if (role === 'REGIONAL_OFFICER') {
-      if (user.regionId) {
-        where.OR = [
-          { farm: { woreda: { zone: { regionId: user.regionId } } } },
-          { farmId: null },
-          { farmId: 'farm_demo_01' },
-        ];
-      }
-    }
-  }
 
   let records = isConnected()
     ? await prisma.diseaseDiagnosis.findMany({
@@ -458,6 +408,7 @@ async function getAllDiagnoses({ farmId, cropType, user } = {}) {
               farmName: true,
               userId: true,
               woredaId: true,
+              kebeleId: true,
               woreda: { select: { id: true, nameEn: true, nameAm: true, zoneId: true, zone: { select: { id: true, regionId: true } } } },
             },
           },
@@ -466,8 +417,8 @@ async function getAllDiagnoses({ farmId, cropType, user } = {}) {
       })
     : [];
 
-  // If user-scoped query returned 0 records, provide available benchmark diagnoses so the screen is never dead
-  if (records.length === 0 && isConnected() && !farmId) {
+  // Fallback benchmark diagnoses ONLY for national scope (ADMIN / RESEARCHER) or unauthenticated preview
+  if (records.length === 0 && isConnected() && !farmId && (!user || isNationalScope(user))) {
     try {
       records = await prisma.diseaseDiagnosis.findMany({
         orderBy: { createdAt: 'desc' },
@@ -478,6 +429,7 @@ async function getAllDiagnoses({ farmId, cropType, user } = {}) {
               farmName: true,
               userId: true,
               woredaId: true,
+              kebeleId: true,
               woreda: { select: { id: true, nameEn: true, nameAm: true, zoneId: true, zone: { select: { id: true, regionId: true } } } },
             },
           },
@@ -577,28 +529,14 @@ async function getDiagnosisJobStatus(jobId) {
  */
 async function getDiagnosesByFarm(farmId, user) {
   if (user && isConnected()) {
-    const role = (user.role || 'FARMER').toUpperCase();
-    if (role !== 'ADMIN' && role !== 'RESEARCHER') {
-      const farm = await prisma.farm.findUnique({
-        where: { id: farmId },
-        include: { woreda: { include: { zone: true } } },
-      });
-      if (!farm) {
-        throw new NotFoundError(`Farm with ID ${farmId} not found`);
-      }
-      if (role === 'FARMER' && farm.userId !== user.id && farmId !== 'farm_demo_01') {
-        throw new ForbiddenError('Access denied: You can only view diagnoses for your own farms');
-      }
-      if ((role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER') && user.woredaId && farm.woredaId !== user.woredaId) {
-        throw new ForbiddenError('Access denied: Farm is outside your woreda jurisdiction');
-      }
-      if (role === 'ZONAL_OFFICER' && user.zoneId && farm.woreda?.zoneId !== user.zoneId) {
-        throw new ForbiddenError('Access denied: Farm is outside your zone jurisdiction');
-      }
-      if (role === 'REGIONAL_OFFICER' && user.regionId && farm.woreda?.zone?.regionId !== user.regionId) {
-        throw new ForbiddenError('Access denied: Farm is outside your region jurisdiction');
-      }
+    const farm = await prisma.farm.findUnique({
+      where: { id: farmId },
+      include: { woreda: { include: { zone: true } } },
+    });
+    if (!farm) {
+      throw new NotFoundError(`Farm with ID ${farmId} not found`);
     }
+    assertResourceInScope(user, farm, 'farm');
   }
   return getAllDiagnoses({ farmId, user });
 }
@@ -621,6 +559,7 @@ async function getDiagnosisById(id, user) {
           primaryCrop: true,
           userId: true,
           woredaId: true,
+          kebeleId: true,
           woreda: {
             select: {
               id: true,
@@ -649,10 +588,7 @@ async function getDiagnosisById(id, user) {
 
   // Jurisdictional check for scoped users
   if (user && isConnected() && diagnosis.farm) {
-    const role = (user.role || 'FARMER').toUpperCase();
-    if (role === 'FARMER' && diagnosis.farm.userId && diagnosis.farm.userId !== user.id && diagnosis.farmId !== 'farm_demo_01') {
-      throw new ForbiddenError('Access denied: You can only view diagnoses for your own farm');
-    }
+    assertResourceInScope(user, diagnosis.farm, 'diagnosis');
   }
 
   return diagnosis;

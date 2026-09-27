@@ -14,6 +14,14 @@ describe('Core Backend - Health & Resilience Probes Suite', () => {
       expect(res.body.dependencies).toBeDefined();
       expect(res.body.dependencies.database).toBeDefined();
     });
+
+    it('should also respond at /api/v1/health alias', async () => {
+      const res = await request(app).get('/api/v1/health');
+
+      expect([200, 503]).toContain(res.status);
+      expect(res.body.service).toMatch(/EthioFarm|AgriEtech/);
+      expect(res.body.dependencies).toBeDefined();
+    });
   });
 
   describe('GET /health/liveness', () => {

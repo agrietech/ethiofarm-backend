@@ -39,6 +39,9 @@ const mediaRoutes = require('./modules/media/media.routes');
 const roleRequestRoutes = require('./modules/roleRequest/roleRequest.routes');
 const weatherRoutes = require('./modules/weather/weather.routes');
 const cropProtectionRoutes = require('./modules/cropProtection/cropProtection.routes');
+const hazardsRoutes = require('./modules/hazards/hazards.routes');
+const animalHealthRoutes = require('./modules/animalHealth/animalHealth.routes');
+const dashboardsRoutes = require('./modules/dashboards/dashboard.routes');
 const { isConnected } = require('./config/db');
 
 
@@ -106,7 +109,7 @@ app.use(
     crossOriginEmbedderPolicy: false,
   })
 );
-app.use(requestTimeout(30)); // 30 second timeout for all requests
+app.use(requestTimeout(60)); // 60 second default timeout for requests
 
 
 // Configurable CORS whitelist
@@ -182,8 +185,8 @@ app.use(
 // Global rate limiter
 app.use(globalLimiter);
 
-// Health check – comprehensive
-app.get('/health', (_req, res) => {
+// Health check handlers
+const healthHandler = (_req, res) => {
   const memUsage = process.memoryUsage();
   const dbUp = isConnected();
   const redis = require('./config/redis');
@@ -206,22 +209,32 @@ app.get('/health', (_req, res) => {
       redis: redisUp ? 'UP' : 'DOWN',
     },
   });
-});
+};
 
-// Liveness probe
-app.get('/health/liveness', (_req, res) => {
+const livenessHandler = (_req, res) => {
   res.status(200).json({ status: 'LIVE', timestamp: new Date().toISOString() });
-});
+};
 
-// Readiness probe
-app.get('/health/readiness', (_req, res) => {
+const readinessHandler = (_req, res) => {
   const dbReady = isConnected();
   res.status(dbReady ? 200 : 503).json({
     database: dbReady ? 'UP' : 'DOWN',
     ready: dbReady,
     timestamp: new Date().toISOString(),
   });
-});
+};
+
+// Health check – comprehensive (root & /api/v1)
+app.get('/health', healthHandler);
+app.get('/api/v1/health', healthHandler);
+
+// Liveness probe (root & /api/v1)
+app.get('/health/liveness', livenessHandler);
+app.get('/api/v1/health/liveness', livenessHandler);
+
+// Readiness probe (root & /api/v1)
+app.get('/health/readiness', readinessHandler);
+app.get('/api/v1/health/readiness', readinessHandler);
 
 // API root metadata
 app.get('/', (_req, res) => {
@@ -259,10 +272,13 @@ app.get('/api/v1', (_req, res) => {
         riskAssessments: { path: '/api/v1/risk-assessments', description: 'Integrated SPI drought, flood, locust, vegetation risk calculation' },
         alerts: { path: '/api/v1/alerts', description: 'Smart alert generation, advisory dispatch, push notifications' },
         diseaseDiagnosis: { path: '/api/v1/disease-diagnosis', description: 'Plant.id botanical identification + Gemini 2.5 Flash multimodal vision' },
+        dashboards: { path: '/api/v1/dashboards', description: 'Role-tailored dashboards for Farmers, DAs, Officers, and Admins' },
         analytics: { path: '/api/v1/analytics', description: 'Executive dashboard analytics, regional breakdown, temporal trends' },
         ai: { path: '/api/v1/ai', description: 'Bilingual AI voice assistant, farmer Q&A, text-to-speech' },
         weather: { path: '/api/v1/weather', description: 'Real live weather forecasts, evapotranspiration, and hourly agro-meteorological metrics' },
         cropProtection: { path: '/api/v1/crop-protection', description: 'AI weed detection, smart spray window, nutrient deficiency, pest ETL scout, tank mix compatibility, seed calculator' },
+        hazards: { path: '/api/v1/hazards', description: 'Multi-hazard assessment: earthquakes, soil degradation, landslides, volcanic, floods, drought, hazard maps' },
+        animalHealth: { path: '/api/v1/animal-health', description: 'Livestock disease surveillance, outbreak tracking, vaccination campaigns, pasture monitoring, vet calendar' },
         ingestion: { path: '/api/v1/ingestion', description: 'Data connector status, manual pipeline pull triggers' },
         ussd: { path: '/api/v1/delivery/ussd', description: 'Interactive USSD menu handler (*212#)' },
         admin: { path: '/api/v1/admin', description: 'System administration, user roles, emergency broadcasts, audit logs, role request approvals' },
@@ -307,10 +323,14 @@ app.use('/api/v1/advisories', advisoriesRoutes);
 app.use('/api/v1/notifications', notificationsRoutes);
 app.use('/api/v1/disease-diagnosis', aiLimiter, diseaseRoutes);
 app.use('/api/v1/media', mediaRoutes);
+app.use('/api/v1/dashboard', dashboardsRoutes);
+app.use('/api/v1/dashboards', dashboardsRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/ai', aiLimiter, aiRoutes);
 app.use('/api/v1/weather', weatherRoutes);
 app.use('/api/v1/crop-protection', cropProtectionRoutes);
+app.use('/api/v1/hazards', hazardsRoutes);
+app.use('/api/v1/animal-health', animalHealthRoutes);
 app.use('/api/v1/ingestion', telemetryLimiter, ingestionRoutes);
 app.use('/api/v1/delivery/ussd', ussdLimiter, ussdRoutes);
 app.use('/api/v1/admin', adminRoutes);

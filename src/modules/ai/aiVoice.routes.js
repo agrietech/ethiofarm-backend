@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('./aiVoice.controller');
-const { authenticate, optionalAuthenticate } = require('../../middleware/auth.middleware');
+const { authenticate } = require('../../middleware/auth.middleware');
 const upload = require('../../middleware/upload.middleware');
 
 const { aiLimiter } = require('../../middleware/rate-limiter.middleware');

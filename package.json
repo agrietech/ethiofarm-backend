@@ -15,7 +15,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "seed": "node scripts/seedDemoFarms.js",
+    "seed": "node scripts/seed_kebeles_and_crops.js",
     "load-boundaries": "node scripts/loadHdxBoundaries.js",
     "backfill": "node scripts/backfillHistoricalWeather.js",
     "test": "jest --runInBand --forceExit",

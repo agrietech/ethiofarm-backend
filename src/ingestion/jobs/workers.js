@@ -200,14 +200,17 @@ const jobProcessors = {
         await Promise.allSettled(
           batch.map(async (woreda) => {
             try {
-              const data = await connectors.openMeteoConnector.fetchForecast({
-                lat: woreda.centerLat,
-                lng: woreda.centerLng,
+              const weatherService = require('../../modules/weather/weather.service');
+              // Warm/refresh hourly forecast cache directly in Redis and memory
+              const weatherForecast = await weatherService.getWeatherForecast({
+                woredaId: woreda.id,
                 days: 7,
+                forceRefresh: true,
               });
 
-              // Save current day data
-              if (data.daily && data.daily.time && data.daily.time.length > 0) {
+              // Save observation to database
+              if (weatherForecast.daily && weatherForecast.daily.length > 0) {
+                const today = weatherForecast.daily[0];
                 await prisma.satelliteObservation.upsert({
                   where: {
                     woredaId_observationDate_source: {
@@ -217,20 +220,22 @@ const jobProcessors = {
                     },
                   },
                   update: {
-                    nasaPowerTempMax: data.daily.temperature_2m_max[0],
-                    nasaPowerTempMin: data.daily.temperature_2m_min[0],
-                    nasaPowerHumidity: data.daily.relative_humidity_2m_mean[0],
-                    rawPayload: data,
+                    nasaPowerTempMax: today.maxTempC,
+                    nasaPowerTempMin: today.minTempC,
+                    nasaPowerHumidity: weatherForecast.current?.relativeHumidity,
+                    chirpsRainfallMm: today.precipitationMm,
+                    rawPayload: weatherForecast,
                     ingestionStatus: 'SUCCESS',
                   },
                   create: {
                     woredaId: woreda.id,
                     observationDate: new Date(),
                     source: 'OPEN_METEO',
-                    nasaPowerTempMax: data.daily.temperature_2m_max[0],
-                    nasaPowerTempMin: data.daily.temperature_2m_min[0],
-                    nasaPowerHumidity: data.daily.relative_humidity_2m_mean[0],
-                    rawPayload: data,
+                    nasaPowerTempMax: today.maxTempC,
+                    nasaPowerTempMin: today.minTempC,
+                    nasaPowerHumidity: weatherForecast.current?.relativeHumidity,
+                    chirpsRainfallMm: today.precipitationMm,
+                    rawPayload: weatherForecast,
                     ingestionStatus: 'SUCCESS',
                   },
                 });
@@ -250,6 +255,20 @@ const jobProcessors = {
         await job.updateProgress(Math.round(((i + batch.length) / woredas.length) * 100));
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
+
+      // Refresh hourly weather for registered active farms
+      try {
+        const weatherService = require('../../modules/weather/weather.service');
+        const activeFarms = await prisma.farm.findMany({
+          take: 30,
+          select: { id: true },
+        });
+        for (const farm of activeFarms) {
+          try {
+            await weatherService.getWeatherForecast({ farmId: farm.id, forceRefresh: true });
+          } catch (_) {}
+        }
+      } catch (_farmErr) {}
 
       const duration = Date.now() - startTime;
       logger.info('Weather forecast ingestion completed', {

@@ -34,7 +34,7 @@ async function testRoleRequestEndpoint() {
       process.exit(1);
     }
     
-    console.log(`\nTest boundary: Region=${woreda.zone.region.name} (${woreda.zone.region.id}), Zone=${woreda.zone.name} (${woreda.zone.id}), Woreda=${woreda.name} (${woreda.id})`);
+    console.log(`\nTest boundary: Region=${woreda.zone.region.nameEn} (${woreda.zone.region.id}), Zone=${woreda.zone.nameEn} (${woreda.zone.id}), Woreda=${woreda.nameEn} (${woreda.id})`);
 
     // 3. Simulate role request creation (same as what the service does)
     console.log('\n--- Simulating role request creation ---');
@@ -47,11 +47,11 @@ async function testRoleRequestEndpoint() {
         currentRole: farmer.role,
         requestedRole: 'DEVELOPMENT_AGENT',
         regionId: woreda.zone.region.id,
-        regionName: woreda.zone.region.name,
+        regionName: woreda.zone.region.nameEn,
         zoneId: woreda.zone.id,
-        zoneName: woreda.zone.name,
+        zoneName: woreda.zone.nameEn,
         woredaId: woreda.id,
-        woredaName: woreda.name,
+        woredaName: woreda.nameEn,
         staffIdNumber: 'TEST-001',
         organizationName: 'Test Organization',
         justification: 'Diagnostic test request',

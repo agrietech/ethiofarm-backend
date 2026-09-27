@@ -13,12 +13,16 @@ function correlationIdMiddleware(req, res, next) {
 }
 
 // Request timeout middleware
-function requestTimeout(seconds = 30) {
+function requestTimeout(seconds = 60) {
   return (req, res, next) => {
-    req.setTimeout(seconds * 1000, () => {
-      const err = new Error('Request Timeout');
-      err.statusCode = 408;
-      next(err);
+    const isAiRoute = req.path && (req.path.includes('/ai') || req.path.includes('/disease-diagnosis') || req.path.includes('/crop-protection'));
+    const effectiveSeconds = isAiRoute ? Math.max(seconds, 90) : seconds;
+    req.setTimeout(effectiveSeconds * 1000, () => {
+      if (!res.headersSent) {
+        const err = new Error('Request Timeout');
+        err.statusCode = 408;
+        next(err);
+      }
     });
     next();
   };

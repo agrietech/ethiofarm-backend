@@ -2,6 +2,7 @@
 const {
   getLiveRegionalWeatherData,
 } = require('./services/regionalWeather.service');
+const weatherService = require('../weather/weather.service');
 const { prisma, isConnected } = require('../../config/db');
 const openRouterClient = require('../../utils/openRouterClient');
 
@@ -23,7 +24,12 @@ const getDynamicFallbackSummary = async () => {
       // In-memory fallback on database count error
     }
   }
-  const weather = await getLiveRegionalWeatherData(11.59, 37.39);
+  const weatherForecast = await weatherService.getWeatherForecast({ lat: 11.59, lng: 37.39, days: 5 });
+  const weather = {
+    temp: weatherForecast.current.temperatureC,
+    rain: weatherForecast.current.precipitationMm,
+    humidity: weatherForecast.current.relativeHumidity,
+  };
 
   return {
     totalFarmsRegistered: farmCount,
@@ -86,19 +92,24 @@ const getDynamicFallbackSummary = async () => {
     ],
     weatherSummary: {
       current: {
-        temperature: weather.temp || 23.4,
-        humidity: weather.humidity || 58.0,
-        rainfall: weather.rain || 0.0,
-        windSpeed: 11.5,
-        condition: (weather.rain || 0) > 2.0 ? 'Rainy' : 'Partly Cloudy',
+        temperature: weatherForecast.current.temperatureC,
+        humidity: weatherForecast.current.relativeHumidity,
+        rainfall: weatherForecast.current.precipitationMm,
+        windSpeed: weatherForecast.current.windSpeedKmh,
+        condition: weatherForecast.current.conditionEn,
+        conditionAm: weatherForecast.current.conditionAm,
+        conditionOm: weatherForecast.current.conditionOm,
       },
-      forecast: [
-        { date: new Date().toISOString(), tempMax: 24.5, tempMin: 13.5, rainfall: weather.rain || 0.0, humidity: 55, condition: 'Sunny' },
-        { date: new Date(Date.now() + 86400000).toISOString(), tempMax: 25.0, tempMin: 14.0, rainfall: 0.0, humidity: 52, condition: 'Clear' },
-        { date: new Date(Date.now() + 86400000 * 2).toISOString(), tempMax: 23.8, tempMin: 13.0, rainfall: 1.2, humidity: 62, condition: 'Partly Cloudy' },
-        { date: new Date(Date.now() + 86400000 * 3).toISOString(), tempMax: 22.0, tempMin: 12.5, rainfall: 4.5, humidity: 70, condition: 'Showers' },
-        { date: new Date(Date.now() + 86400000 * 4).toISOString(), tempMax: 24.2, tempMin: 13.2, rainfall: 0.5, humidity: 58, condition: 'Sunny' },
-      ],
+      forecast: weatherForecast.daily.slice(0, 5).map(d => ({
+        date: d.date,
+        tempMax: d.maxTempC,
+        tempMin: d.minTempC,
+        rainfall: d.precipitationMm,
+        humidity: d.precipitationProbability > 50 ? 70 : 52,
+        condition: d.conditionEn,
+        conditionAm: d.conditionAm,
+        conditionOm: d.conditionOm,
+      })),
     },
     telemetry: {
       averageNdvi: 0.68,
@@ -321,23 +332,28 @@ async function getDashboardSummary({ role, userId, woredaId, zoneId, regionId } 
           centerLng = targetWoreda.centerLng;
         }
       }
-      const liveWeather = await getLiveRegionalWeatherData(centerLat, centerLng);
+      const weatherData = await weatherService.getWeatherForecast({ lat: centerLat, lng: centerLng, days: 5 });
 
       const weatherSummary = {
         current: {
-          temperature: liveWeather.temp || 22.5,
-          humidity: liveWeather.humidity || 55.0,
-          rainfall: liveWeather.rain || 0.0,
-          windSpeed: 11.0,
-          condition: (liveWeather.rain || 0) > 5.0 ? 'Rainy' : ((liveWeather.rain || 0) > 0 ? 'Cloudy' : 'Sunny'),
+          temperature: weatherData.current.temperatureC,
+          humidity: weatherData.current.relativeHumidity,
+          rainfall: weatherData.current.precipitationMm,
+          windSpeed: weatherData.current.windSpeedKmh,
+          condition: weatherData.current.conditionEn,
+          conditionAm: weatherData.current.conditionAm,
+          conditionOm: weatherData.current.conditionOm,
         },
-        forecast: [
-          { date: new Date().toISOString(), tempMax: (liveWeather.temp || 22.5) + 2.0, tempMin: (liveWeather.temp || 22.5) - 8.0, rainfall: liveWeather.rain || 0.0, humidity: liveWeather.humidity || 55, condition: 'Sunny' },
-          { date: new Date(Date.now() + 86400000).toISOString(), tempMax: 24.5, tempMin: 13.5, rainfall: 0.0, humidity: 52, condition: 'Clear' },
-          { date: new Date(Date.now() + 86400000 * 2).toISOString(), tempMax: 23.0, tempMin: 13.0, rainfall: 1.5, humidity: 64, condition: 'Partly Cloudy' },
-          { date: new Date(Date.now() + 86400000 * 3).toISOString(), tempMax: 21.5, tempMin: 12.0, rainfall: 5.2, humidity: 72, condition: 'Showers' },
-          { date: new Date(Date.now() + 86400000 * 4).toISOString(), tempMax: 23.8, tempMin: 13.0, rainfall: 0.8, humidity: 60, condition: 'Sunny' },
-        ],
+        forecast: weatherData.daily.slice(0, 5).map(d => ({
+          date: d.date,
+          tempMax: d.maxTempC,
+          tempMin: d.minTempC,
+          rainfall: d.precipitationMm,
+          humidity: d.precipitationProbability > 50 ? 70 : 55,
+          condition: d.conditionEn,
+          conditionAm: d.conditionAm,
+          conditionOm: d.conditionOm,
+        })),
       };
 
       // ── 3. Farm Area & Crop Distribution ──
@@ -462,8 +478,10 @@ async function getDashboardSummary({ role, userId, woredaId, zoneId, regionId } 
 }
 
 // Regional risk and weather indicators
-async function getRegionalBreakdown() {
+async function getRegionalBreakdown(regionId = null) {
+  const where = regionId ? { id: regionId } : {};
   const regions = await prisma.region.findMany({
+    where,
     select: {
       id: true,
       nameEn: true,

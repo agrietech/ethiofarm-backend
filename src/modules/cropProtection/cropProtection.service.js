@@ -1,15 +1,14 @@
 const fs = require('fs');
-const path = require('path');
 const logger = require('../../utils/logger');
 const openRouterClient = require('../../utils/openRouterClient');
 const { prisma, isConnected } = require('../../config/db');
 const { getWeatherForecast } = require('../weather/weather.service');
 
 const { ETHIOPIAN_WEED_REGISTRY, calculateKnapsackDosage } = require('./weedDatabase');
-const { ETHIOPIAN_PEST_REGISTRY, evaluateEconomicThreshold } = require('./pestDatabase');
+const { evaluateEconomicThreshold } = require('./pestDatabase');
 const { NUTRIENT_DEFICIENCIES, diagnoseDeficiencySymptoms } = require('./nutrientDeficiencyRules');
-const { COMMON_AGROCHEMICALS, FORMULATION_TYPES, validateTankMixCompatibility } = require('./tankMixDatabase');
-const { ETHIOPIAN_CROP_AGRONOMY, convertToHectares, calculateSeedRequirements } = require('./seedRateDatabase');
+const { validateTankMixCompatibility } = require('./tankMixDatabase');
+const { calculateSeedRequirements } = require('./seedRateDatabase');
 
 /**
  * Clean & resolve image file buffer to base64
@@ -33,7 +32,7 @@ function resolveBase64(imageFile, rawBase64) {
 /**
  * 1. AI Weed Detection & Selective Herbicide Prescriptions
  */
-async function detectWeed({ imageBase64: rawBase64, imageUrl, imageFile, cropType = 'Wheat', areaHectares = 1.0, language = 'en' }) {
+async function detectWeed({ imageBase64: rawBase64, imageUrl, imageFile, cropType = 'Wheat', areaHectares = 1.0, _language = 'en' }) {
   const base64Data = resolveBase64(imageFile, rawBase64);
   let matchedWeed = ETHIOPIAN_WEED_REGISTRY[0]; // Default Parthenium
   let aiIdentification = null;
@@ -299,7 +298,7 @@ async function evaluateSprayWindow({ latitude, longitude, farmId = null }) {
 /**
  * 4. Visual Leaf Nutrient Deficiency Scanner
  */
-async function scanNutrientDeficiency({ imageBase64: rawBase64, imageUrl, imageFile, cropType = 'Maize', leafPosition = 'older', pattern = 'v_shaped', soilPh = 6.5, language = 'en' }) {
+async function scanNutrientDeficiency({ imageBase64: rawBase64, imageUrl, imageFile, cropType = 'Maize', leafPosition = 'older', pattern = 'v_shaped', soilPh = 6.5, _language = 'en' }) {
   const base64Data = resolveBase64(imageFile, rawBase64);
   let matchedDeficiency = null;
   let aiNotes = null;
@@ -389,7 +388,7 @@ Respond strictly in valid JSON format only:
 /**
  * 5. Insect Pest Scout & Economic Threshold (ETL) Evaluator
  */
-async function scoutPest({ imageBase64: rawBase64, imageUrl, imageFile, pestId = null, cropType = 'Maize', cropStage = 'midWhorl', observedDamagePercent = 15, infestedPlantsCount = null, totalSampledPlants = 100, language = 'en' }) {
+async function scoutPest({ imageBase64: rawBase64, imageUrl, imageFile, pestId = null, cropType = 'Maize', cropStage = 'midWhorl', observedDamagePercent = 15, infestedPlantsCount = null, totalSampledPlants = 100, _language = 'en' }) {
   const base64Data = resolveBase64(imageFile, rawBase64);
   let resolvedPestId = pestId || 'fall_armyworm';
   let aiPestDetection = null;
@@ -463,7 +462,11 @@ Respond strictly in valid JSON format only:
     scoutMethod: aiPestDetection ? 'AI_MULTIMODAL_PEST_SCOUT' : 'MANUAL_FIELD_SCOUT_ETL',
     aiConfidence: aiPestDetection?.confidenceScore ?? 0.93,
     cropType,
-    economicThresholdEvaluation: etlResult
+    economicThresholdEvaluation: etlResult,
+    scoutResult: {
+      ...etlResult,
+      actionRecommended: etlResult.recommendation?.action || etlResult.recommendation?.en || 'ACTION_EVALUATED',
+    },
   };
 }
 
@@ -493,6 +496,10 @@ function calculateSeedAndPlanting({ cropId = 'teff', areaValue = 1.0, areaUnit =
   });
   return {
     success: true,
+    calculation: {
+      ...result.seedPlan,
+      recommendedSeedKgTotal: result.seedPlan?.totalSeedRequiredKg,
+    },
     ...result
   };
 }

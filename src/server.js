@@ -54,13 +54,18 @@ server.listen(PORT, () => {
 });
 
 async function autoSyncAdminAccount() {
+  // Provisioning an administrator is deliberately opt-in.  A server must
+  // never create privileged accounts from fallback credentials at startup.
+  if (process.env.BOOTSTRAP_ADMIN_ON_STARTUP !== 'true') return;
+
   try {
-    const adminPassword = (process.env.ADMIN_CONSOLE_PASSWORD || process.env.ADMIN_PASSWORD || 'Admin@2026!').trim();
-    const adminEmails = [
-      (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
-      'abraham.tiruneh7@gmail.com',
-      'admin@ethiofarm.et',
-    ].filter(Boolean);
+    const adminPassword = (process.env.ADMIN_CONSOLE_PASSWORD || process.env.ADMIN_PASSWORD || '').trim();
+    const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+    if (!adminPassword || !adminEmail) {
+      throw new Error('BOOTSTRAP_ADMIN_ON_STARTUP requires ADMIN_EMAIL and ADMIN_CONSOLE_PASSWORD');
+    }
+
+    const adminEmails = [adminEmail];
 
     const bcrypt = require('bcryptjs');
     const { prisma } = require('./config/db');
@@ -102,7 +107,7 @@ async function autoSyncAdminAccount() {
     initSocket(server);
     await connectDB();
 
-    // Synchronize administrative user with environment credentials if configured
+    // Explicit, one-off provisioning only; disabled by default.
     autoSyncAdminAccount().catch((e) => logger.warn(`Admin sync notice: ${e.message}`));
 
     // Warm boundaries in memory for sub-millisecond response times

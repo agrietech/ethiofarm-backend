@@ -1,4 +1,7 @@
 const authService = require('./auth.service');
+const mfaService = require('./mfa.service');
+const sessionService = require('./session.service');
+const securityMonitor = require('./security-monitor.service');
 
 // Register user endpoint
 async function register(req, res, next) {
@@ -10,11 +13,47 @@ async function register(req, res, next) {
   }
 }
 
-// User login endpoint (Email or Phone)
+// User login endpoint (Email or Phone) with brute-force protection & session tracking
 async function login(req, res, next) {
   try {
-    const result = await authService.loginUser(req.body);
-    res.status(200).json({ success: true, data: result });
+    const identifier = req.body?.phoneNumber || req.body?.phone || req.body?.email || req.body?.identifier;
+    if (identifier) {
+      const isLocked = await securityMonitor.isAccountLocked(identifier);
+      if (isLocked) {
+        return res.status(423).json({
+          success: false,
+          error: {
+            code: 'ACCOUNT_LOCKED',
+            message: 'Account is temporarily locked due to multiple failed login attempts. Please try again later.',
+          },
+        });
+      }
+    }
+
+    try {
+      const result = await authService.loginUser(req.body);
+      if (identifier) {
+        await securityMonitor.recordLoginAttempt(identifier, true, req.ip, req.headers['user-agent']);
+      }
+      if (result && result.user) {
+        const session = await sessionService.createSession(
+          result.user.id,
+          {
+            device: req.headers['x-device-name'] || req.body?.deviceName,
+            browser: req.headers['user-agent'],
+            ipAddress: req.ip,
+          },
+          req.ip
+        );
+        result.session = session;
+      }
+      res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      if (identifier) {
+        await securityMonitor.recordLoginAttempt(identifier, false, req.ip, req.headers['user-agent']);
+      }
+      throw err;
+    }
   } catch (error) {
     next(error);
   }
@@ -825,6 +864,93 @@ async function resendVerification(req, res, next) {
   }
 }
 
+// Setup MFA - generate TOTP secret and backup recovery codes
+async function setupMfa(req, res, next) {
+  try {
+    const identifier = req.user?.email || req.user?.phoneNumber || req.user?.id;
+    const result = await mfaService.generateTOTPSecret(req.user.id, identifier);
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Verify MFA setup token and activate MFA
+async function verifyMfa(req, res, next) {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Token is required' } });
+    }
+    const result = await mfaService.enableMFA(req.user.id, token);
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_TOKEN', message: result.message } });
+    }
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Disable MFA for current user with password confirmation
+async function disableMfa(req, res, next) {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Password is required to disable MFA' } });
+    }
+
+    const { prisma } = require('../../config/db');
+    const bcrypt = require('bcryptjs');
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user || !user.passwordHash) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'User verification failed' } });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash).catch(() => false);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Incorrect password' } });
+    }
+
+    const result = await mfaService.disableMFA(req.user.id);
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// List all active sessions for current user
+async function listSessions(req, res, next) {
+  try {
+    const sessions = await sessionService.getUserSessions(req.user.id);
+    res.status(200).json({ success: true, data: { sessions, count: sessions.length } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Terminate specific remote session
+async function terminateSession(req, res, next) {
+  try {
+    const { id } = req.params;
+    const result = await sessionService.terminateSession(req.user.id, id);
+    res.status(200).json({ success: true, data: result, message: 'Session terminated successfully' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Terminate all other sessions except current
+async function terminateOtherSessions(req, res, next) {
+  try {
+    const currentSessionId = req.body?.currentSessionId || req.headers['x-session-id'];
+    const result = await sessionService.terminateOtherSessions(req.user.id, currentSessionId);
+    res.status(200).json({ success: true, data: result, message: 'Other sessions terminated successfully' });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -844,4 +970,10 @@ module.exports = {
   verifyLoginOtp,
   verifyPhoneOtp,
   resendPhoneOtp,
+  setupMfa,
+  verifyMfa,
+  disableMfa,
+  listSessions,
+  terminateSession,
+  terminateOtherSessions,
 };

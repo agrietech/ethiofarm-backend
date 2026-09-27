@@ -1,6 +1,6 @@
 const { prisma } = require('../../config/db');
 const redis = require('../../config/redis');
-const { NotFoundError } = require('../../utils/errors');
+const { NotFoundError, BadRequestError, ForbiddenError } = require('../../utils/errors');
 
 /**
  * Boundaries Service
@@ -513,6 +513,57 @@ async function resolveKebeleByCoords(lat, lng) {
   return kebele?.id || null;
 }
 
+async function updateKebelePolygon({ kebeleId, polygonGeojson, user }) {
+  if (!kebeleId) throw new BadRequestError('Kebele ID is required');
+  if (!polygonGeojson) throw new BadRequestError('polygonGeojson boundary is required');
+
+  const existingKebele = await prisma.kebele.findUnique({
+    where: { id: kebeleId },
+    select: { id: true, woredaId: true, nameEn: true },
+  });
+  if (!existingKebele) {
+    throw new NotFoundError(`Kebele '${kebeleId}' not found`);
+  }
+
+  // Enforce jurisdiction scope for DEVELOPMENT_AGENT
+  const userRole = (user?.role || '').toUpperCase();
+  if (userRole === 'DEVELOPMENT_AGENT') {
+    if (user.kebeleId && user.kebeleId !== kebeleId) {
+      throw new ForbiddenError('Access denied: you can only update your assigned Kebele boundary');
+    }
+    if (user.woredaId && existingKebele.woredaId !== user.woredaId) {
+      throw new ForbiddenError('Access denied: this Kebele is outside your assigned woreda jurisdiction');
+    }
+  }
+
+  const centroid = require('@turf/centroid').default || require('@turf/centroid');
+  const { getCoord } = require('@turf/invariant');
+  const { validateFarmPolygon } = require('../farms/farmGeometry');
+
+  const validPolygon = validateFarmPolygon(polygonGeojson);
+  const [derivedLng, derivedLat] = getCoord(centroid(validPolygon));
+
+  const updated = await prisma.kebele.update({
+    where: { id: kebeleId },
+    data: {
+      geojson: validPolygon,
+      centerLat: derivedLat,
+      centerLng: derivedLng,
+    },
+    include: {
+      woreda: {
+        include: {
+          zone: {
+            include: { region: true },
+          },
+        },
+      },
+    },
+  });
+
+  return updated;
+}
+
 module.exports = {
   getRegions,
   getZones,
@@ -520,6 +571,7 @@ module.exports = {
   getWoredaById,
   getKebeles,
   getKebeleById,
+  updateKebelePolygon,
   resolveWoredaByCoords,
   resolveKebeleByCoords,
   getWoredaCoordinates,

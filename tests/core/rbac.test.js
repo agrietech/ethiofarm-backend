@@ -202,11 +202,12 @@ describe('Core Backend - RBAC & Boundary Authorization', () => {
       expect(res.body.error.code).toBe('OUT_OF_SCOPE');
     });
 
-    it('should allow regional officer and admin unrestricted access to zones', async () => {
+    it('should reject a regional officer outside their region while allowing admin national access', async () => {
       const resReg = await request(app)
         .post('/zones/zone-amhara-99/advisory')
         .set('Authorization', `Bearer ${regionalToken}`);
-      expect(resReg.status).toBe(200);
+      expect(resReg.status).toBe(403);
+      expect(resReg.body.error.code).toBe('OUT_OF_SCOPE');
 
       const resAdmin = await request(app)
         .post('/zones/zone-amhara-99/advisory')
@@ -234,16 +235,18 @@ describe('Core Backend - RBAC & Boundary Authorization', () => {
       expect(res.body.error.code).toBe('OUT_OF_SCOPE');
     });
 
-    it('should allow ZONAL_OFFICER, REGIONAL_OFFICER, and ADMIN unrestricted access across woredas', async () => {
+    it('should reject zonal and regional officers outside their parent geography while allowing admin national access', async () => {
       const resZonal = await request(app)
         .post('/woredas/woreda-amhara-99/risk-override')
         .set('Authorization', `Bearer ${zonalToken}`);
-      expect(resZonal.status).toBe(200);
+      expect(resZonal.status).toBe(403);
+      expect(resZonal.body.error.code).toBe('OUT_OF_SCOPE');
 
       const resRegional = await request(app)
         .post('/woredas/woreda-amhara-99/risk-override')
         .set('Authorization', `Bearer ${regionalToken}`);
-      expect(resRegional.status).toBe(200);
+      expect(resRegional.status).toBe(403);
+      expect(resRegional.body.error.code).toBe('OUT_OF_SCOPE');
 
       const resAdmin = await request(app)
         .post('/woredas/woreda-amhara-99/risk-override')

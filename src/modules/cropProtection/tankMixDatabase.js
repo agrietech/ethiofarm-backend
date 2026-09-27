@@ -209,6 +209,7 @@ function validateTankMixCompatibility({ productIds = [], waterVolumeLiters = 16 
   return {
     isValid: highestRisk !== 'INCOMPATIBLE',
     riskLevel: highestRisk,
+    compatibilityStatus: highestRisk,
     matchedProducts,
     hasConflicts: conflicts.length > 0,
     conflicts,

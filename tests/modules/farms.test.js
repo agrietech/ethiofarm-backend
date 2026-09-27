@@ -93,9 +93,48 @@ describe('Farms Module API Suite', () => {
         farmName: 'Invalid Farm Out of Country',
         latitude: 51.5074, // London coordinates
         longitude: -0.1278,
+        polygonGeojson: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-0.13, 51.50],
+              [-0.12, 51.50],
+              [-0.12, 51.51],
+              [-0.13, 51.51],
+              [-0.13, 51.50],
+            ],
+          ],
+        },
       });
 
     expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('POST /api/v1/farms - should reject farm registration by non-farmer roles (403 Forbidden)', async () => {
+    const daUser = { id: 'usr_da_test_01', phoneNumber: '+251911990011', role: 'DEVELOPMENT_AGENT' };
+    const daToken = generateAccessToken(daUser);
+
+    const res = await request(app)
+      .post('/api/v1/farms')
+      .set('Authorization', `Bearer ${daToken}`)
+      .send({
+        farmName: 'DA Unauthorized Farm Plot',
+        polygonGeojson: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [39.26, 8.53],
+              [39.28, 8.53],
+              [39.28, 8.55],
+              [39.26, 8.55],
+              [39.26, 8.53],
+            ],
+          ],
+        },
+      });
+
+    expect(res.status).toBe(403);
     expect(res.body.success).toBe(false);
   });
 

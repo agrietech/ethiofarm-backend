@@ -241,17 +241,20 @@ class OpenRouterClient {
 
     // 0. Direct Google Gemini Multi-Account Pool Integration (1,500 free requests/day per account)
     if (this.geminiKeyPool && this.geminiKeyPool.length > 0 && messages.length > 0) {
-      const geminiCandidateModels = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-preview-tts'];
+      const geminiCandidateModels = ['gemini-3.6-flash'];
       const geminiContent = messages
         .map((m) => `${(m.role || 'user').toUpperCase()}: ${typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.map(c => c.text || '').filter(Boolean).join(' ') : JSON.stringify(m.content))}`)
         .join('\n\n');
 
-      const maxAttempts = Math.min(this.geminiKeyPool.length, 5);
+      const maxAttempts = Math.min(this.geminiKeyPool.length, 3);
+      const geminiStartTime = Date.now();
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (Date.now() - geminiStartTime > 10000) break;
         const keyObj = this._getNextGeminiKey();
         if (!keyObj || !keyObj.key) break;
 
         for (const gModel of geminiCandidateModels) {
+          if (Date.now() - geminiStartTime > 10000) break;
           try {
             const geminiRes = await axios.post(
               `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent`,
@@ -268,7 +271,7 @@ class OpenRouterClient {
                   'x-goog-api-key': keyObj.key,
                   'Content-Type': 'application/json',
                 },
-                timeout: 12000,
+                timeout: 6000,
               }
             );
             const text = geminiRes.data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -286,7 +289,8 @@ class OpenRouterClient {
             const errMsg = geminiErr.response?.data?.error?.message || geminiErr.message;
             this._markGeminiKeyError(keyObj, statusCode, errMsg);
             logger.warn(`[OpenRouterClient] Direct Google Gemini (${gModel} - ${keyObj.id}) attempt notice: ${errMsg}`);
-            if (statusCode === 429) {
+            const isTimeout = geminiErr.code === 'ECONNABORTED' || errMsg?.toLowerCase().includes('timeout');
+            if (statusCode === 429 || isTimeout) {
               // Break inner model loop to rotate to the next account key immediately
               break;
             }
@@ -660,9 +664,6 @@ Required JSON format:
     if (this.geminiKeyPool && this.geminiKeyPool.length > 0) {
       const geminiVisionModels = [
         'gemini-3.6-flash',
-        'gemini-3.5-flash',
-        'gemini-3.5-flash-lite',
-        'gemini-flash-latest',
       ];
       const userTextPrompt = `Analyze this Ethiopian crop disease sample. Return ONLY a single valid JSON object following the requested schema.
 Crop Hint: ${cropHint || 'Unknown'}.
@@ -670,12 +671,15 @@ Plant.id botanical data: ${JSON.stringify(plantIdData || {})}.
 Pl@ntNet disease detection: ${JSON.stringify(plantNetData || {})}.
 Perenual treatment knowledge: ${JSON.stringify(perenualData || {})}.`;
 
-      const maxAttempts = Math.min(this.geminiKeyPool.length, 5);
+      const maxAttempts = Math.min(this.geminiKeyPool.length, 3);
+      const visionStartTime = Date.now();
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (Date.now() - visionStartTime > 14000) break;
         const keyObj = this._getNextGeminiKey();
         if (!keyObj || !keyObj.key) break;
 
         for (const gModel of geminiVisionModels) {
+          if (Date.now() - visionStartTime > 14000) break;
           try {
             const parts = [{ text: `${systemPrompt}\n\n${userTextPrompt}` }];
             if (isValidImage) {
@@ -702,7 +706,7 @@ Perenual treatment knowledge: ${JSON.stringify(perenualData || {})}.`;
                   'x-goog-api-key': keyObj.key,
                   'Content-Type': 'application/json',
                 },
-                timeout: 10000,
+                timeout: 7000,
               }
             );
 
@@ -738,7 +742,8 @@ Perenual treatment knowledge: ${JSON.stringify(perenualData || {})}.`;
             const errMsg = geminiErr.response?.data?.error?.message || geminiErr.message;
             this._markGeminiKeyError(keyObj, statusCode, errMsg);
             logger.warn(`[OpenRouterClient] Gemini Vision (${gModel} - ${keyObj.id}) attempt notice: ${errMsg}`);
-            if (statusCode === 429) {
+            const isTimeout = geminiErr.code === 'ECONNABORTED' || errMsg?.toLowerCase().includes('timeout');
+            if (statusCode === 429 || isTimeout) {
               break;
             }
           }

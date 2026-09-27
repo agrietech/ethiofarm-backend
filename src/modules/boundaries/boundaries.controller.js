@@ -100,6 +100,21 @@ async function resolveCoordinates(req, res, next) {
   }
 }
 
+async function updateKebelePolygon(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { polygonGeojson } = req.body;
+    const data = await boundariesService.updateKebelePolygon({
+      kebeleId: id,
+      polygonGeojson,
+      user: req.user,
+    });
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getRegions,
   getZones,
@@ -107,6 +122,7 @@ module.exports = {
   getWoredaDetails,
   getKebeles,
   getKebeleDetails,
+  updateKebelePolygon,
   getHierarchy,
   getNationalSummary,
   resolveCoordinates,

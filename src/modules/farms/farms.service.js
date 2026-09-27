@@ -46,27 +46,9 @@ async function createFarm({
     }
   }
 
-  let finalPolygon = polygonGeojson;
-  if (!finalPolygon && inputLat !== undefined && inputLng !== undefined) {
-    const lat = Number(inputLat);
-    const lng = Number(inputLng);
-    const offset = 0.002; // ~220m box for point GPS capture
-    finalPolygon = {
-      type: 'Polygon',
-      coordinates: [
-        [
-          [lng - offset, lat - offset],
-          [lng + offset, lat - offset],
-          [lng + offset, lat + offset],
-          [lng - offset, lat + offset],
-          [lng - offset, lat - offset],
-        ],
-      ],
-    };
-  }
-
+  const finalPolygon = polygonGeojson;
   if (!finalPolygon) {
-    throw createHttpError('polygonGeojson or valid latitude/longitude is required', 400);
+    throw createHttpError('polygonGeojson GIS boundary polygon is strictly required to register a farm plot', 400);
   }
 
   // Step 1 – deep polygon validation (coordinate ranges, closure, kinks)
@@ -148,15 +130,23 @@ async function createFarm({
 async function getFarmsByScope(user = {}) {
   const role = (user.role || 'FARMER').toUpperCase();
   const userId = user.id;
-
   const where = {};
+
   if (role === 'FARMER') {
     where.userId = userId;
-  } else if (role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER') {
-    if (user.woredaId) {
+  } else if (role === 'DEVELOPMENT_AGENT') {
+    if (user.kebeleId) {
+      where.kebeleId = user.kebeleId;
+    } else if (user.kebeleName) {
+      where.kebele = { nameEn: { equals: user.kebeleName, mode: 'insensitive' } };
+    } else if (user.woredaId) {
       where.woredaId = user.woredaId;
     } else if (userId) {
       where.userId = userId;
+    }
+  } else if (role === 'WOREDA_OFFICER') {
+    if (user.woredaId) {
+      where.woredaId = user.woredaId;
     }
   } else if (role === 'ZONAL_OFFICER') {
     if (user.zoneId) {
@@ -185,34 +175,6 @@ async function getFarmsByScope(user = {}) {
     },
     orderBy: { createdAt: 'desc' },
   });
-
-  // For administrative or field supervisory roles without an assigned jurisdiction yet,
-  // ensure they can view system farms for supervision rather than an empty dashboard
-  if (
-    farms.length === 0 &&
-    (role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER' || role === 'ZONAL_OFFICER' || role === 'REGIONAL_OFFICER') &&
-    !user.woredaId &&
-    !user.zoneId &&
-    !user.regionId
-  ) {
-    farms = await prisma.farm.findMany({
-      include: {
-        woreda: {
-          select: {
-            id: true,
-            nameEn: true,
-            nameAm: true,
-            zoneId: true,
-            zone: { select: { id: true, nameEn: true, regionId: true } },
-          },
-        },
-        crop: true,
-        sensors: true,
-      },
-      take: 20,
-      orderBy: { createdAt: 'desc' },
-    });
-  }
 
   return farms;
 }
@@ -269,7 +231,15 @@ async function updateFarm({ id, data = {}, user = {}, clientUpdatedAt }) {
     if (role === 'FARMER' && existing.userId !== user.id) {
       throw new ForbiddenError('Access denied: You can only update your own farms');
     }
-    if ((role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER') && user.woredaId && existing.woredaId !== user.woredaId) {
+    if (role === 'DEVELOPMENT_AGENT') {
+      if (user.kebeleId && existing.kebeleId && existing.kebeleId !== user.kebeleId) {
+        throw new ForbiddenError('Access denied: Farm is outside your kebele jurisdiction');
+      }
+      if (user.woredaId && existing.woredaId !== user.woredaId) {
+        throw new ForbiddenError('Access denied: Farm is outside your woreda jurisdiction');
+      }
+    }
+    if (role === 'WOREDA_OFFICER' && user.woredaId && existing.woredaId !== user.woredaId) {
       throw new ForbiddenError('Access denied: Farm is outside your woreda jurisdiction');
     }
     if (role === 'ZONAL_OFFICER' && user.zoneId && existing.woreda?.zoneId !== user.zoneId) {
@@ -387,7 +357,15 @@ async function deleteFarm({ id, user = {} }) {
     if (role === 'FARMER' && existing.userId !== user.id) {
       throw new ForbiddenError('Access denied: You can only delete your own farms');
     }
-    if ((role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER') && user.woredaId && existing.woredaId !== user.woredaId) {
+    if (role === 'DEVELOPMENT_AGENT') {
+      if (user.kebeleId && existing.kebeleId && existing.kebeleId !== user.kebeleId) {
+        throw new ForbiddenError('Access denied: Farm is outside your kebele jurisdiction');
+      }
+      if (user.woredaId && existing.woredaId !== user.woredaId) {
+        throw new ForbiddenError('Access denied: Farm is outside your woreda jurisdiction');
+      }
+    }
+    if (role === 'WOREDA_OFFICER' && user.woredaId && existing.woredaId !== user.woredaId) {
       throw new ForbiddenError('Access denied: Farm is outside your woreda jurisdiction');
     }
     if (role === 'ZONAL_OFFICER' && user.zoneId && existing.woreda?.zoneId !== user.zoneId) {
