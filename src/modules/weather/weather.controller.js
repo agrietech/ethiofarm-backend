@@ -7,18 +7,17 @@ const weatherService = require('./weather.service');
 async function getForecast(req, res, next) {
   try {
     const user = req.user || {};
-    const { woredaId, lat, lng, days } = req.query;
-
-    // Use requested woredaId, user's assigned woredaId, or national fallback
-    const targetWoredaId = woredaId || user.woredaId || null;
-    const targetLat = lat || null;
-    const targetLng = lng || null;
+    const { farmId, kebeleId, woredaId, lat, lng, days, forceRefresh } = req.query;
 
     const data = await weatherService.getWeatherForecast({
-      woredaId: targetWoredaId,
-      lat: targetLat,
-      lng: targetLng,
+      farmId: farmId || null,
+      kebeleId: kebeleId || null,
+      woredaId: woredaId || null,
+      lat: lat || null,
+      lng: lng || null,
+      user,
       days: days || 7,
+      forceRefresh: forceRefresh === 'true' || forceRefresh === true,
     });
 
     res.status(200).json({ success: true, data });
@@ -30,14 +29,17 @@ async function getForecast(req, res, next) {
 async function getCurrentWeather(req, res, next) {
   try {
     const user = req.user || {};
-    const { woredaId, lat, lng } = req.query;
+    const { farmId, kebeleId, woredaId, lat, lng, forceRefresh } = req.query;
 
-    const targetWoredaId = woredaId || user.woredaId || null;
     const forecast = await weatherService.getWeatherForecast({
-      woredaId: targetWoredaId,
+      farmId: farmId || null,
+      kebeleId: kebeleId || null,
+      woredaId: woredaId || null,
       lat: lat || null,
       lng: lng || null,
+      user,
       days: 1,
+      forceRefresh: forceRefresh === 'true' || forceRefresh === true,
     });
 
     res.status(200).json({
@@ -47,8 +49,27 @@ async function getCurrentWeather(req, res, next) {
         current: forecast.current,
         dataSources: forecast.dataSources,
         timestamp: forecast.timestamp,
+        isCached: forecast.isCached,
+        updatedHourly: forecast.updatedHourly,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getLocations(req, res, next) {
+  try {
+    const user = req.user || {};
+    const { q, limit } = req.query;
+
+    const locations = await weatherService.searchWeatherLocations({
+      query: q || '',
+      limit: limit ? parseInt(limit, 10) : 20,
+      userId: user.id || null,
+    });
+
+    res.status(200).json({ success: true, data: locations });
   } catch (error) {
     next(error);
   }
@@ -57,4 +78,5 @@ async function getCurrentWeather(req, res, next) {
 module.exports = {
   getForecast,
   getCurrentWeather,
+  getLocations,
 };
