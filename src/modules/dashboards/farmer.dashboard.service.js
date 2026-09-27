@@ -9,7 +9,7 @@ class FarmerDashboardService {
   /**
    * Complete Farmer-specific dashboard aggregation
    */
-  async getFarmerDashboard(userId, woredaId) {
+  async getFarmerDashboard(userId, woredaId, user = {}) {
     const cacheKey = `dashboard:farmer:${userId}`;
 
     // Check Redis cache first
@@ -42,7 +42,7 @@ class FarmerDashboardService {
       this.getRecentDiagnoses(userId),
       this.getAdvisories(woredaId),
       this.getMarketPrices(woredaId),
-      this.getWeatherSummary(woredaId, primaryFarm?.id),
+      this.getWeatherSummary(woredaId, primaryFarm?.id, user),
     ]);
 
     const totalArea = myFarms.reduce((sum, f) => sum + (Number(f.areaHectares) || 0), 0);
@@ -299,69 +299,9 @@ class FarmerDashboardService {
     ];
   }
 
-  async getWeatherSummary(woredaId, farmId = null) {
-    try {
-      const weatherService = require('../weather/weather.service');
-      const forecast = await weatherService.getWeatherForecast({
-        woredaId,
-        farmId,
-        days: 7,
-      });
-
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-      return {
-        location: forecast.location.nameEn,
-        level: forecast.location.level,
-        current: {
-          temperatureC: forecast.current.temperatureC,
-          feelsLikeC: forecast.current.feelsLikeC,
-          condition: forecast.current.conditionEn,
-          conditionAm: forecast.current.conditionAm,
-          conditionOm: forecast.current.conditionOm,
-          humidityPercent: forecast.current.relativeHumidity,
-          rainfallMm: forecast.current.precipitationMm,
-          windSpeedKmh: forecast.current.windSpeedKmh,
-          windGustsKmh: forecast.current.windGustsKmh,
-          uvIndex: forecast.current.uvIndex,
-          surfacePressureHpa: forecast.current.surfacePressureHpa,
-          et0EvapotranspirationMm: forecast.current.et0EvapotranspirationMm,
-          sunrise: forecast.current.sunrise,
-          sunset: forecast.current.sunset,
-        },
-        forecast7Day: forecast.daily.map((d) => {
-          const dayDate = new Date(d.date);
-          const dayName = dayNames[dayDate.getDay()] || 'Today';
-          let farmingAdvice = 'Optimal solar conditions for field operations.';
-          if (d.precipitationMm > 8.0) {
-            farmingAdvice = 'Heavy rainfall expected: clear drainage channels and delay spraying/fertilizer.';
-          } else if (d.precipitationMm > 2.0) {
-            farmingAdvice = 'Moderate showers expected: pause irrigation and monitor crop moisture.';
-          } else if (d.windSpeedKmh > 20.0) {
-            farmingAdvice = 'High winds: delay pesticide spraying to avoid drift.';
-          } else if (d.maxTempC > 28.0) {
-            farmingAdvice = 'Elevated temperatures: check soil moisture and schedule morning irrigation.';
-          } else {
-            farmingAdvice = 'Favorable weather: ideal for field scouting, weeding, and fertilizer application.';
-          }
-
-          return {
-            date: d.date,
-            day: dayName,
-            tempMax: d.maxTempC,
-            tempMin: d.minTempC,
-            rainfallMm: d.precipitationMm,
-            condition: d.conditionEn,
-            conditionAm: d.conditionAm,
-            conditionOm: d.conditionOm,
-            farmingAdvice,
-          };
-        }),
-      };
-    } catch (err) {
-      logger.warn(`[FarmerDashboard] Live weather fetch notice: ${err.message}`);
-      return null;
-    }
+  async getWeatherSummary(woredaId, farmId = null, user = {}) {
+    const { getScopedWeatherSummary } = require('./dashboardWeatherHelper');
+    return getScopedWeatherSummary({ woredaId, farmId, user });
   }
 
   calculateFarmHealth(farm, alertCount = 0) {

@@ -1,5 +1,6 @@
 const { prisma } = require('../../config/db');
 const redis = require('../../config/redis');
+const { getScopedWeatherSummary } = require('./dashboardWeatherHelper');
 
 // Fallback memory cache
 const memoryAgentCache = new Map();
@@ -8,7 +9,7 @@ class AgentDashboardService {
   /**
    * Kebele Development Agent (DA) Dashboard
    */
-  async getAgentDashboard(userId, woredaId, kebeleId) {
+  async getAgentDashboard(userId, woredaId, kebeleId, user = {}) {
     const cacheKey = `dashboard:agent:${userId}`;
 
     if (redis && typeof redis.get === 'function') {
@@ -23,10 +24,11 @@ class AgentDashboardService {
       }
     }
 
-    const [farmers, diagnoses, alerts] = await Promise.all([
+    const [farmers, diagnoses, alerts, weatherData] = await Promise.all([
       this.getAssignedFarmers(woredaId, kebeleId),
       this.getKebeleDiagnoses(woredaId, kebeleId),
       this.getKebeleAlerts(woredaId),
+      getScopedWeatherSummary({ kebeleId, woredaId, user }),
     ]);
 
     const dashboard = {
@@ -88,6 +90,9 @@ class AgentDashboardService {
         { action: 'REGISTER_FARMER', label: 'Register New Farmer', icon: 'user-plus' },
         { action: 'SUBMIT_REPORT', label: 'Submit Field Weekly Report', icon: 'file-text' },
       ],
+
+      // Live Scoped Weather Telemetry (Kebele extension area)
+      weather: weatherData,
     };
 
     // Cache for 3 minutes

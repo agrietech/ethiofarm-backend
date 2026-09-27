@@ -1,5 +1,6 @@
 const { prisma } = require('../../config/db');
 const redis = require('../../config/redis');
+const { getScopedWeatherSummary } = require('./dashboardWeatherHelper');
 
 // Fallback memory cache
 const memoryOfficerCache = new Map();
@@ -8,7 +9,7 @@ class OfficerDashboardService {
   /**
    * Command Center for Woreda Agricultural Officers
    */
-  async getWoredaCommandCenter(userId, woredaId) {
+  async getWoredaCommandCenter(userId, woredaId, user = {}) {
     const cacheKey = `dashboard:officer:woreda:${woredaId || 'all'}`;
 
     if (redis && typeof redis.get === 'function') {
@@ -33,6 +34,7 @@ class OfficerDashboardService {
       sensorStats,
       developmentAgents,
       riskStats,
+      weatherData,
     ] = await Promise.all([
       this.getWoredaDetails(woredaId),
       this.getFarmsCount(scope),
@@ -41,6 +43,7 @@ class OfficerDashboardService {
       this.getSensorNetwork(scope),
       this.getDevelopmentAgents(scope),
       this.getRiskHeatmap(scope),
+      getScopedWeatherSummary({ woredaId, user }),
     ]);
 
     const dashboard = {
@@ -116,6 +119,9 @@ class OfficerDashboardService {
         { action: 'APPROVE_REQUESTS', label: 'Review Role Upgrades', icon: 'check-circle' },
         { action: 'VIEW_REPORTS', label: 'Generate Woreda Report', icon: 'file-text' },
       ],
+
+      // Live Scoped Weather Telemetry
+      weather: weatherData,
     };
 
     // Cache for 2 minutes
@@ -134,7 +140,7 @@ class OfficerDashboardService {
    * Command Center for Zonal Agricultural Officers
    * Properly scoped: filters all data to woredas within the assigned zone
    */
-  async getZonalCommandCenter(userId, zoneId) {
+  async getZonalCommandCenter(userId, zoneId, user = {}) {
     const cacheKey = `dashboard:officer:zone:${zoneId || 'all'}`;
 
     if (redis && typeof redis.get === 'function') {
@@ -169,6 +175,7 @@ class OfficerDashboardService {
       sensorStats,
       developmentAgents,
       riskStats,
+      weatherData,
     ] = await Promise.all([
       this.getFarmsCount(scope),
       this.getFarmersCount(scope),
@@ -176,6 +183,7 @@ class OfficerDashboardService {
       this.getSensorNetwork(scope),
       this.getDevelopmentAgents(scope),
       this.getRiskHeatmap(scope),
+      getScopedWeatherSummary({ zoneId, user }),
     ]);
 
     const dashboard = {
@@ -217,6 +225,9 @@ class OfficerDashboardService {
         { action: 'VIEW_REPORTS', label: 'Generate Zone Report', icon: 'file-text' },
         { action: 'APPROVE_REQUESTS', label: 'Review Role Upgrades', icon: 'check-circle' },
       ],
+
+      // Live Scoped Weather Telemetry
+      weather: weatherData,
     };
 
     if (redis && typeof redis.setex === 'function') {
@@ -232,7 +243,7 @@ class OfficerDashboardService {
    * Command Center for Regional Agricultural Officers
    * Properly scoped: filters all data to woredas/zones within the assigned region
    */
-  async getRegionalCommandCenter(userId, regionId) {
+  async getRegionalCommandCenter(userId, regionId, user = {}) {
     const cacheKey = `dashboard:officer:region:${regionId || 'all'}`;
 
     if (redis && typeof redis.get === 'function') {
@@ -266,6 +277,7 @@ class OfficerDashboardService {
       sensorStats,
       developmentAgents,
       riskStats,
+      weatherData,
     ] = await Promise.all([
       this.getFarmsCount(scope),
       this.getFarmersCount(scope),
@@ -273,6 +285,7 @@ class OfficerDashboardService {
       this.getSensorNetwork(scope),
       this.getDevelopmentAgents(scope),
       this.getRiskHeatmap(scope),
+      getScopedWeatherSummary({ regionId, user }),
     ]);
 
     const dashboard = {
@@ -314,6 +327,9 @@ class OfficerDashboardService {
         { action: 'VIEW_REPORTS', label: 'Generate Region Report', icon: 'file-text' },
         { action: 'APPROVE_REQUESTS', label: 'Review Role Upgrades', icon: 'check-circle' },
       ],
+
+      // Live Scoped Weather Telemetry
+      weather: weatherData,
     };
 
     if (redis && typeof redis.setex === 'function') {
