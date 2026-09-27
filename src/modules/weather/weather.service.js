@@ -638,6 +638,9 @@ async function getWeatherForecast({
     }
   }
 
+  const cacheTtlSeconds = getSecondsUntilNextHour();
+  const nextHourlyUpdate = new Date(Date.now() + cacheTtlSeconds * 1000).toISOString();
+
   const result = {
     location: {
       level: location.level,
@@ -672,11 +675,11 @@ async function getWeatherForecast({
     timestamp: new Date().toISOString(),
     isCached: false,
     updatedHourly: true,
+    nextHourlyUpdate,
   };
 
   // 9. Store in Redis and L1 Memory Cache (Dynamically Aligned with Next Hour)
   try {
-    const cacheTtlSeconds = getSecondsUntilNextHour();
     const cacheEntry = {
       data: result,
       expiresAt: Date.now() + cacheTtlSeconds * 1000,
