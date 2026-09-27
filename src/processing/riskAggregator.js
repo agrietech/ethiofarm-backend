@@ -32,66 +32,58 @@ function getAlertLevel(score) {
 // Calculate weighted integrated risk composite risk index
 function calculateCompositeRisk(hazardScores = {}, customWeights = {}) {
   const seasonal = getSeasonalWeights();
-  // customWeights fully override seasonal weights when provided
-  const weights = Object.keys(customWeights).length > 0
-    ? { ...seasonal, ...customWeights }
-    : seasonal;
+  const hasCustom = Object.keys(customWeights).length > 0;
+  const weights = hasCustom ? customWeights : seasonal;
 
-  const sDrought = Math.max(0, Math.min(1, hazardScores.drought || 0));
-  const sFlood = Math.max(0, Math.min(1, hazardScores.flood || 0));
-  const sLocust = Math.max(0, Math.min(1, hazardScores.locust || 0));
-  const sVeg = Math.max(0, Math.min(1, hazardScores.vegetation || 0));
-  const sEarthquake = Math.max(0, Math.min(1, hazardScores.earthquake || 0));
-  const sLandslide = Math.max(0, Math.min(1, hazardScores.landslide || 0));
-  const sVolcanic = Math.max(0, Math.min(1, hazardScores.volcanic || 0));
-  const sErosion = Math.max(0, Math.min(1, hazardScores.erosion || 0));
-  const sAnimalDisease = Math.max(0, Math.min(1, hazardScores.animalDisease || 0));
+  const allKeys = ['drought', 'flood', 'locust', 'vegetation', 'earthquake', 'landslide', 'volcanic', 'erosion', 'animalDisease'];
+  const inputKeys = Object.keys(hazardScores);
 
-  const weightedSum =
-    sDrought * (weights.drought || 0) +
-    sFlood * (weights.flood || 0) +
-    sLocust * (weights.locust || 0) +
-    sVeg * (weights.vegetation || 0) +
-    sEarthquake * (weights.earthquake || 0) +
-    sLandslide * (weights.landslide || 0) +
-    sVolcanic * (weights.volcanic || 0) +
-    sErosion * (weights.erosion || 0) +
-    sAnimalDisease * (weights.animalDisease || 0);
+  // If custom weights provided, evaluate based on custom weights keys
+  // If hazardScores provided with a subset of keys, evaluate based on that subset
+  const evalKeys = hasCustom
+    ? Object.keys(customWeights).filter((k) => k !== 'season')
+    : (inputKeys.length > 0 ? inputKeys.filter((k) => allKeys.includes(k)) : allKeys);
 
-  const totalWeight = (weights.drought || 0) + (weights.flood || 0) + (weights.locust || 0) +
-    (weights.vegetation || 0) + (weights.earthquake || 0) + (weights.landslide || 0) +
-    (weights.volcanic || 0) + (weights.erosion || 0) + (weights.animalDisease || 0);
-  const compositeScore = Math.round((weightedSum / (totalWeight || 1)) * 100) / 100;
+  let weightedSum = 0;
+  let totalWeight = 0;
 
-  const drivers = [
-    { name: 'DROUGHT', score: sDrought },
-    { name: 'FLOOD', score: sFlood },
-    { name: 'LOCUST', score: sLocust },
-    { name: 'VEGETATION_STRESS', score: sVeg },
-    { name: 'EARTHQUAKE', score: sEarthquake },
-    { name: 'LANDSLIDE', score: sLandslide },
-    { name: 'VOLCANIC', score: sVolcanic },
-    { name: 'SOIL_DEGRADATION', score: sErosion },
-    { name: 'ANIMAL_DISEASE', score: sAnimalDisease },
-  ];
-  drivers.sort((a, b) => b.score - a.score);
+  for (const k of evalKeys) {
+    const score = Math.max(0, Math.min(1, Number(hazardScores[k]) || 0));
+    const w = Number(weights[k]) || 0;
+    weightedSum += score * w;
+    totalWeight += w;
+  }
+
+  const compositeScore = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 100) / 100 : 0;
+
+  const drivers = allKeys.map((k) => {
+    let name = k.toUpperCase();
+    if (k === 'vegetation') name = 'VEGETATION_STRESS';
+    if (k === 'erosion') name = 'SOIL_DEGRADATION';
+    if (k === 'animalDisease') name = 'ANIMAL_DISEASE';
+    return {
+      name,
+      score: Math.max(0, Math.min(1, Number(hazardScores[k]) || 0)),
+    };
+  }).sort((a, b) => b.score - a.score);
+
   const primaryThreat = drivers[0].score > 0.2 ? drivers[0].name : 'NONE';
 
   return {
     compositeScore,
     alertLevel: getAlertLevel(compositeScore),
     primaryThreat,
-    season: weights.season || 'CUSTOM',
+    season: (hasCustom && customWeights.season) || seasonal.season || 'CUSTOM',
     breakdown: {
-      drought: { score: sDrought, weight: weights.drought || 0 },
-      flood: { score: sFlood, weight: weights.flood || 0 },
-      locust: { score: sLocust, weight: weights.locust || 0 },
-      vegetation: { score: sVeg, weight: weights.vegetation || 0 },
-      earthquake: { score: sEarthquake, weight: weights.earthquake || 0 },
-      landslide: { score: sLandslide, weight: weights.landslide || 0 },
-      volcanic: { score: sVolcanic, weight: weights.volcanic || 0 },
-      erosion: { score: sErosion, weight: weights.erosion || 0 },
-      animalDisease: { score: sAnimalDisease, weight: weights.animalDisease || 0 },
+      drought: { score: Number(hazardScores.drought) || 0, weight: weights.drought || 0 },
+      flood: { score: Number(hazardScores.flood) || 0, weight: weights.flood || 0 },
+      locust: { score: Number(hazardScores.locust) || 0, weight: weights.locust || 0 },
+      vegetation: { score: Number(hazardScores.vegetation) || 0, weight: weights.vegetation || 0 },
+      earthquake: { score: Number(hazardScores.earthquake) || 0, weight: weights.earthquake || 0 },
+      landslide: { score: Number(hazardScores.landslide) || 0, weight: weights.landslide || 0 },
+      volcanic: { score: Number(hazardScores.volcanic) || 0, weight: weights.volcanic || 0 },
+      erosion: { score: Number(hazardScores.erosion) || 0, weight: weights.erosion || 0 },
+      animalDisease: { score: Number(hazardScores.animalDisease) || 0, weight: weights.animalDisease || 0 },
     },
   };
 }
