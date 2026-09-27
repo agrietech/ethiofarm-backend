@@ -6,9 +6,68 @@ const { getWoredaCoordinates, resolveWoredaByCoords } = require('../boundaries/b
 const openWeatherMapConnector = require('../../ingestion/connectors/openWeatherMapConnector');
 const worldBankClimateConnector = require('../../ingestion/connectors/worldBankClimateConnector');
 
-// ── In-Memory L1 Weather Cache (TTL: 1 Hour = 3600s) ────────────────────────
+// ── In-Memory L1 Weather Cache & Ethiopian Hourly Timezone Helpers ──────────
 const l1WeatherCache = new Map();
-const WEATHER_CACHE_TTL_SECONDS = 3600;
+const WEATHER_CACHE_TTL_SECONDS = 1800; // 30 Minutes maximum background cache
+
+/**
+ * Resolves current ISO hour in Ethiopian Local Time (Africa/Addis_Ababa, UTC+3)
+ * E.g. '2026-09-27T13:00'
+ */
+function getEthiopianCurrentHourIso() {
+  const eatDateStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Addis_Ababa',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const eatHour = parseInt(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Africa/Addis_Ababa',
+      hour: 'numeric',
+      hour12: false,
+    }).format(new Date()),
+    10
+  );
+  return `${eatDateStr}T${String(eatHour).padStart(2, '0')}:00`;
+}
+
+/**
+ * Returns dynamic seconds until top of the next hour in Ethiopia
+ */
+function getSecondsUntilNextHour() {
+  const now = new Date();
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+  const remainingSeconds = ((59 - minutes) * 60) + (60 - seconds);
+  // Keep cache TTL between 3 minutes (180s) and 30 minutes (1800s) to keep hourly telemetry fresh
+  return Math.max(180, Math.min(remainingSeconds, 1800));
+}
+
+/**
+ * Validates and prunes cached weather data so that hourly forecast always starts from the current hour
+ */
+function sanitizeCachedForecast(cachedData, expiresAt, cachedAt) {
+  if (!cachedData || !Array.isArray(cachedData.hourly)) return null;
+
+  const currentHourIso = getEthiopianCurrentHourIso();
+  const activeHourly = cachedData.hourly.filter((h) => h.time >= currentHourIso).slice(0, 24);
+
+  // If at least 18 hours remain in the forward curve, use the cached data with pruned hourly array
+  if (activeHourly.length >= 18) {
+    return {
+      ...cachedData,
+      hourly: activeHourly,
+      isCached: true,
+      cachedAt: cachedAt || cachedData.timestamp,
+      nextHourlyUpdate: new Date(expiresAt).toISOString(),
+    };
+  }
+
+  // Current hour has drifted too far past cached hours: return null to trigger fresh live fetch
+  return null;
+}
+
 
 // Standard WMO Weather Code Descriptions (English, Amharic & Afaan Oromoo)
 const WMO_CODE_MAP = {
@@ -233,12 +292,8 @@ async function getWeatherForecast({
   if (!forceRefresh && fastKey) {
     const memHit = l1WeatherCache.get(fastKey);
     if (memHit && memHit.expiresAt > Date.now()) {
-      return {
-        ...memHit.data,
-        isCached: true,
-        cachedAt: memHit.cachedAt,
-        nextHourlyUpdate: new Date(memHit.expiresAt).toISOString(),
-      };
+      const sanitized = sanitizeCachedForecast(memHit.data, memHit.expiresAt, memHit.cachedAt);
+      if (sanitized) return sanitized;
     }
 
     try {
@@ -246,17 +301,15 @@ async function getWeatherForecast({
         const redisHit = await redis.get(fastKey);
         if (redisHit) {
           const parsed = JSON.parse(redisHit);
+          const cacheTtl = getSecondsUntilNextHour();
+          const expiresAt = Date.now() + cacheTtl * 1000;
           l1WeatherCache.set(fastKey, {
             data: parsed,
-            expiresAt: Date.now() + WEATHER_CACHE_TTL_SECONDS * 1000,
+            expiresAt,
             cachedAt: parsed.timestamp || new Date().toISOString(),
           });
-          return {
-            ...parsed,
-            isCached: true,
-            cachedAt: parsed.timestamp,
-            nextHourlyUpdate: new Date(Date.now() + 3600000).toISOString(),
-          };
+          const sanitized = sanitizeCachedForecast(parsed, expiresAt, parsed.timestamp);
+          if (sanitized) return sanitized;
         }
       }
     } catch (_e) {}
@@ -265,19 +318,15 @@ async function getWeatherForecast({
   // 1. Resolve Location Entity
   const location = await resolveTargetLocation({ farmId, kebeleId, woredaId, lat, lng, user });
 
-  // 2. Check Hourly Cache (TTL: 3600s = 1 Hour)
+  // 2. Check Hourly Cache (Dynamically aligned with next hour)
   const cacheKey = `weather:forecast:${location.level}:${location.id}:${requestedDays}`;
 
   if (!forceRefresh) {
     // Check in-memory L1 cache (<0.1ms)
     const memHit = l1WeatherCache.get(cacheKey);
     if (memHit && memHit.expiresAt > Date.now()) {
-      return {
-        ...memHit.data,
-        isCached: true,
-        cachedAt: memHit.cachedAt,
-        nextHourlyUpdate: new Date(memHit.expiresAt).toISOString(),
-      };
+      const sanitized = sanitizeCachedForecast(memHit.data, memHit.expiresAt, memHit.cachedAt);
+      if (sanitized) return sanitized;
     }
 
     // Check Redis L2 cache (<2ms)
@@ -286,17 +335,15 @@ async function getWeatherForecast({
         const redisHit = await redis.get(cacheKey);
         if (redisHit) {
           const parsed = JSON.parse(redisHit);
+          const cacheTtl = getSecondsUntilNextHour();
+          const expiresAt = Date.now() + cacheTtl * 1000;
           l1WeatherCache.set(cacheKey, {
             data: parsed,
-            expiresAt: Date.now() + WEATHER_CACHE_TTL_SECONDS * 1000,
+            expiresAt,
             cachedAt: parsed.timestamp || new Date().toISOString(),
           });
-          return {
-            ...parsed,
-            isCached: true,
-            cachedAt: parsed.timestamp,
-            nextHourlyUpdate: new Date(Date.now() + 3600000).toISOString(),
-          };
+          const sanitized = sanitizeCachedForecast(parsed, expiresAt, parsed.timestamp);
+          if (sanitized) return sanitized;
         }
       }
     } catch (_e) {}
@@ -462,20 +509,19 @@ async function getWeatherForecast({
     };
   }
 
-  // 7. Structure Hourly Forecast (24 Hours from current hour)
+  // 7. Structure Hourly Forecast (24 Hours from current hour in Africa/Addis_Ababa)
   const hourly = [];
   if (openMeteoData?.hourly?.time) {
     const h = openMeteoData.hourly;
-    const nowHour = new Date().getHours();
-    const totalHours = Math.min(h.time.length, 48);
+    const currentHourIso = getEthiopianCurrentHourIso();
+    const totalHours = Math.min(h.time.length, 96);
     let count = 0;
 
     for (let i = 0; i < totalHours && count < 24; i++) {
       const timeStr = h.time[i];
-      const hourPart = parseInt(timeStr.split('T')[1]?.split(':')[0], 10);
-      const isPast = i < nowHour && timeStr.startsWith(new Date().toISOString().split('T')[0]);
-      if (isPast) continue;
+      if (timeStr < currentHourIso) continue;
 
+      const hourPart = parseInt(timeStr.split('T')[1]?.split(':')[0], 10);
       const code = h.weather_code?.[i] ?? 0;
       const cond = resolveWeatherDetails(code);
 
@@ -495,17 +541,19 @@ async function getWeatherForecast({
       count++;
     }
   } else {
-    // Diurnal atmospheric simulation based on solar cycle & location temperature
-    const now = new Date();
+    // Diurnal atmospheric simulation based on solar cycle & location temperature in Ethiopia
+    const currentHourIso = getEthiopianCurrentHourIso();
+    const [datePart, hourStr] = currentHourIso.split('T');
+    const startHour = parseInt(hourStr.split(':')[0], 10);
+
     for (let hr = 0; hr < 24; hr++) {
-      const forecastTime = new Date(now.getTime() + hr * 3600000);
-      const hourPart = forecastTime.getHours();
+      const hourPart = (startHour + hr) % 24;
       const diurnalFactor = Math.sin(((hourPart - 9) / 24) * 2 * Math.PI);
       const hourTemp = Math.round((current.temperatureC + diurnalFactor * 4.5) * 10) / 10;
       const hourHumidity = Math.min(95, Math.max(25, Math.round(current.relativeHumidity - diurnalFactor * 15)));
 
       hourly.push({
-        time: forecastTime.toISOString(),
+        time: `${datePart}T${String(hourPart).padStart(2, '0')}:00`,
         hourLabel: `${String(hourPart).padStart(2, '0')}:00`,
         temperatureC: hourTemp,
         precipitationProbability: current.precipitationMm > 0 ? 60 : 5,
@@ -626,11 +674,12 @@ async function getWeatherForecast({
     updatedHourly: true,
   };
 
-  // 9. Store in Redis and L1 Memory Cache (TTL: 1 Hour)
+  // 9. Store in Redis and L1 Memory Cache (Dynamically Aligned with Next Hour)
   try {
+    const cacheTtlSeconds = getSecondsUntilNextHour();
     const cacheEntry = {
       data: result,
-      expiresAt: Date.now() + WEATHER_CACHE_TTL_SECONDS * 1000,
+      expiresAt: Date.now() + cacheTtlSeconds * 1000,
       cachedAt: result.timestamp,
     };
     l1WeatherCache.set(cacheKey, cacheEntry);
@@ -639,9 +688,9 @@ async function getWeatherForecast({
     }
 
     if (redis && typeof redis.setex === 'function') {
-      await redis.setex(cacheKey, WEATHER_CACHE_TTL_SECONDS, JSON.stringify(result));
+      await redis.setex(cacheKey, cacheTtlSeconds, JSON.stringify(result));
       if (fastKey && fastKey !== cacheKey) {
-        await redis.setex(fastKey, WEATHER_CACHE_TTL_SECONDS, JSON.stringify(result));
+        await redis.setex(fastKey, cacheTtlSeconds, JSON.stringify(result));
       }
     }
   } catch (cacheErr) {
