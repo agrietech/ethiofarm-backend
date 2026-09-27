@@ -205,15 +205,30 @@ async function handleUssdSession(req, res, _next) {
       const choice = inputs[0];
 
       if (choice === '1') {
-        // Option 1: Weather Forecast
-        const temp = 23 + Math.floor(Math.random() * 5);
-        const rainProb = 15 + Math.floor(Math.random() * 25);
-        if (session.lang === 'am') {
-          response = `${t.weatherHeader} (${session.woredaName})፡\nየሙቀት መጠን፡ ${temp}°C፣ ከፊል ደመናማ። የዝናብ ዕድል፡ ${rainProb}%። ሰብል ለማረም አመቺ ነው።`;
-        } else if (session.lang === 'om') {
-          response = `${t.weatherHeader} (${session.woredaName})፡\nHo'ina፡ ${temp}°C, Duumessa muraasa. Carraa roobaa: %${rainProb}. Qonnaaf mijataadha.`;
-        } else {
-          response = `${t.weatherHeader} (${session.woredaName}):\nTemp: ${temp}°C, Partly Cloudy. Rain Prob: ${rainProb}%. Optimal for weeding.`;
+        // Option 1: Live Real Weather Forecast
+        try {
+          const weatherService = require('../../modules/weather/weather.service');
+          const forecast = await weatherService.getWeatherForecast({
+            woredaId: session.woredaId,
+            days: 1,
+          });
+
+          const cur = forecast.current;
+          const temp = Math.round(cur.temperatureC);
+          const rainProb = forecast.daily?.[0]?.precipitationProbability ?? 10;
+          const condAm = cur.conditionAm || 'ጥርት ያለ';
+          const condOm = cur.conditionOm || 'Qulqulluu';
+          const condEn = cur.conditionEn || 'Clear';
+
+          if (session.lang === 'am') {
+            response = `${t.weatherHeader} (${session.woredaName})፡\nየሙቀት መጠን፡ ${temp}°C፣ ${condAm}። የዝናብ ዕድል፡ ${rainProb}%።`;
+          } else if (session.lang === 'om') {
+            response = `${t.weatherHeader} (${session.woredaName})፡\nHo'ina፡ ${temp}°C, ${condOm}. Carraa roobaa: %${rainProb}.`;
+          } else {
+            response = `${t.weatherHeader} (${session.woredaName}):\nTemp: ${temp}°C, ${condEn}. Rain Prob: ${rainProb}%.`;
+          }
+        } catch (_err) {
+          response = `${t.weatherHeader} (${session.woredaName}):\nTemp: 22°C. Normal conditions.`;
         }
       } else if (choice === '2') {
         // Option 2: Drought & Rain Status
