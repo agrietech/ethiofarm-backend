@@ -437,6 +437,121 @@ async function getWoredaCoordinates(woredaId) {
   return { id: woredaId, nameEn: woredaId, nameAm: woredaId, lat: 9.0, lng: 39.0 };
 }
 
+const REGIONAL_CAPITALS = {
+  'ET-OR': { nameEn: 'Adama / Finfinne', lat: 8.54, lng: 39.27 },
+  'ET-AM': { nameEn: 'Bahir Dar', lat: 11.59, lng: 37.39 },
+  'ET-TI': { nameEn: 'Mekelle', lat: 13.49, lng: 39.47 },
+  'ET-SI': { nameEn: 'Hawassa', lat: 7.05, lng: 38.47 },
+  'ET-SO': { nameEn: 'Jigjiga', lat: 9.35, lng: 42.80 },
+  'ET-AF': { nameEn: 'Semera', lat: 11.79, lng: 41.01 },
+  'ET-SN': { nameEn: 'Hawassa', lat: 7.05, lng: 38.47 },
+  'ET-SW': { nameEn: 'Bonga', lat: 7.28, lng: 36.24 },
+  'ET-CE': { nameEn: 'Hosanna', lat: 7.55, lng: 37.85 },
+  'ET-SE': { nameEn: 'Wolaita Sodo', lat: 6.86, lng: 37.76 },
+  'ET-BG': { nameEn: 'Assosa', lat: 10.06, lng: 34.53 },
+  'ET-GA': { nameEn: 'Gambela', lat: 8.25, lng: 34.58 },
+  'ET-HA': { nameEn: 'Harar', lat: 9.31, lng: 42.13 },
+  'ET-DD': { nameEn: 'Dire Dawa', lat: 9.59, lng: 41.86 },
+  'ET-AA': { nameEn: 'Addis Ababa', lat: 9.03, lng: 38.74 },
+};
+
+async function getZoneCoordinates(zoneId) {
+  if (!zoneId) return null;
+  try {
+    const zone = await prisma.zone.findUnique({
+      where: { id: zoneId },
+      include: {
+        region: { select: { id: true, nameEn: true, nameAm: true, code: true } },
+        woredas: {
+          select: { id: true, nameEn: true, nameAm: true, centerLat: true, centerLng: true },
+          take: 20,
+        },
+      },
+    });
+
+    if (zone) {
+      let lat = 8.5;
+      let lng = 39.0;
+      if (zone.woredas && zone.woredas.length > 0) {
+        const valid = zone.woredas.filter((w) => w.centerLat && w.centerLng);
+        if (valid.length > 0) {
+          lat = valid.reduce((sum, w) => sum + w.centerLat, 0) / valid.length;
+          lng = valid.reduce((sum, w) => sum + w.centerLng, 0) / valid.length;
+        }
+      }
+      return {
+        id: zone.id,
+        zoneId: zone.id,
+        nameEn: zone.nameEn,
+        nameAm: zone.nameAm || zone.nameEn,
+        regionName: zone.region?.nameEn,
+        lat: Math.round(lat * 1000) / 1000,
+        lng: Math.round(lng * 1000) / 1000,
+      };
+    }
+  } catch (_e) {}
+
+  return { id: zoneId, zoneId, nameEn: 'Zone Command', nameAm: 'የዞን መምሪያ', lat: 8.5, lng: 39.0 };
+}
+
+async function getRegionCoordinates(regionId) {
+  if (!regionId) return null;
+  try {
+    const region = await prisma.region.findUnique({
+      where: { id: regionId },
+      include: {
+        zones: {
+          include: {
+            woredas: {
+              select: { centerLat: true, centerLng: true },
+              take: 5,
+            },
+          },
+          take: 5,
+        },
+      },
+    });
+
+    if (region) {
+      if (region.code && REGIONAL_CAPITALS[region.code]) {
+        const cap = REGIONAL_CAPITALS[region.code];
+        return {
+          id: region.id,
+          regionId: region.id,
+          nameEn: region.nameEn,
+          nameAm: region.nameAm || region.nameEn,
+          lat: cap.lat,
+          lng: cap.lng,
+        };
+      }
+
+      const coords = [];
+      for (const z of (region.zones || [])) {
+        for (const w of (z.woredas || [])) {
+          if (w.centerLat && w.centerLng) coords.push(w);
+        }
+      }
+      let lat = 9.03;
+      let lng = 38.74;
+      if (coords.length > 0) {
+        lat = coords.reduce((sum, c) => sum + c.centerLat, 0) / coords.length;
+        lng = coords.reduce((sum, c) => sum + c.centerLng, 0) / coords.length;
+      }
+      return {
+        id: region.id,
+        regionId: region.id,
+        nameEn: region.nameEn,
+        nameAm: region.nameAm || region.nameEn,
+        lat: Math.round(lat * 1000) / 1000,
+        lng: Math.round(lng * 1000) / 1000,
+      };
+    }
+  } catch (_e) {}
+
+  return { id: regionId, regionId, nameEn: 'Regional State', nameAm: 'የክልል መስተዳድር', lat: 9.03, lng: 38.74 };
+}
+
+
 async function getNationalSummary() {
   if (l1Cache.summary) return l1Cache.summary;
 
@@ -575,6 +690,8 @@ module.exports = {
   resolveWoredaByCoords,
   resolveKebeleByCoords,
   getWoredaCoordinates,
+  getZoneCoordinates,
+  getRegionCoordinates,
   getNationalSummary,
   getAdministrativeHierarchy,
   warmBoundariesCache,

@@ -378,4 +378,5 @@ module.exports = {
   authorizeZoneScope,
   authorizeRegionScope,
   authenticateSensor,
+  getAdminApiKeySet,
 };

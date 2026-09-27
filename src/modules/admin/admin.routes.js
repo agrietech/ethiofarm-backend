@@ -6,7 +6,7 @@ const env = require('../../config/env');
 
 // Import the unified auth middleware so adminAuth delegates JWT verification
 // to a single, patchable code path — no duplicate JWT logic.
-const { authenticate: sharedAuthenticate } = require('../../middleware/auth.middleware');
+const { authenticate: sharedAuthenticate, getAdminApiKeySet } = require('../../middleware/auth.middleware');
 
 // Admin authentication middleware (Supports API Keys, JWT Bearer Tokens, and browser sessions)
 const { isTokenBlacklisted } = require('../auth/auth.service');
@@ -30,16 +30,8 @@ const adminAuth = (req, res, next) => {
   // 1. API Key Authentication (x-api-key header) — short-circuit before JWT path
   const apiKey = req.headers['x-api-key'] || req.headers['api-key'];
   if (apiKey) {
-    const validKeys = env.getAdminKeys ? env.getAdminKeys() : [
-      ...(process.env.ADMIN_API_KEYS || '').split(','),
-      process.env.ADMIN_CONSOLE_PASSWORD,
-      process.env.ADMIN_PASSWORD,
-      process.env.ADMIN_SECRET,
-      process.env.ADMIN_KEY,
-      process.env.ADMIN_PASS,
-      process.env.ADMIN_TOKEN,
-    ].map(k => (k || '').trim()).filter(Boolean);
-    if (validKeys.length > 0 && validKeys.includes(apiKey.trim())) {
+    const validKeys = getAdminApiKeySet();
+    if (validKeys.size > 0 && validKeys.has(apiKey.trim())) {
       req.user = { id: 'usr_admin_apikey', email: 'admin_apikey@ethiofarm.et', fullName: 'API Key Administrator', role: 'ADMIN' };
       return next();
     }

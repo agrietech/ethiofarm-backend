@@ -3,28 +3,61 @@ const { prisma, isConnected } = require('../../config/db');
 const openRouterClient = require('../../utils/openRouterClient');
 
 const getDynamicFallbackSummary = async () => {
-  let farmCount = 14;
-  let sensorCount = 8;
-  let alertCount = 2;
-  let woredaCount = 1148;
-  let totalFarmers = 24;
-  let totalDiagnoses = 18;
+  let farmCount = 0;
+  let sensorCount = 0;
+  let alertCount = 0;
+  let woredaCount = 0;
+  let totalFarmers = 0;
+  let totalDiagnoses = 0;
+  let recentAlertsList = [];
+
   if (isConnected()) {
     try {
-      farmCount = await prisma.farm.count();
-      sensorCount = await prisma.sensor.count();
-      alertCount = await prisma.alert.count({ where: { status: 'ACTIVE' } });
-      totalFarmers = await prisma.user.count({ where: { role: 'FARMER' } });
-      totalDiagnoses = await prisma.diseaseDiagnosis.count();
+      [farmCount, sensorCount, alertCount, woredaCount, totalFarmers, totalDiagnoses] = await Promise.all([
+        prisma.farm.count(),
+        prisma.sensor.count(),
+        prisma.alert.count({ where: { status: 'ACTIVE' } }),
+        prisma.woreda.count(),
+        prisma.user.count({ where: { role: 'FARMER' } }),
+        prisma.diseaseDiagnosis.count(),
+      ]);
+
+      const rawAlerts = await prisma.alert.findMany({
+        where: { status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: {
+          woreda: {
+            select: {
+              nameEn: true,
+              zone: { select: { nameEn: true, region: { select: { nameEn: true } } } },
+            },
+          },
+        },
+      });
+
+      recentAlertsList = rawAlerts.map((a) => ({
+        id: a.id,
+        title: a.titleEn || a.headline || 'Alert',
+        message: a.messageEn || '',
+        severity: a.severity || 'MODERATE',
+        hazardType: a.hazardType || 'DROUGHT',
+        woredaName: a.woreda?.nameEn || null,
+        zoneName: a.woreda?.zone?.nameEn || null,
+        regionName: a.woreda?.zone?.region?.nameEn || null,
+        isRead: false,
+        createdAt: a.createdAt,
+      }));
     } catch (_) {
       // In-memory fallback on database count error
     }
   }
+
   const weatherForecast = await weatherService.getWeatherForecast({ lat: 11.59, lng: 37.39, days: 5 });
   const weather = {
-    temp: weatherForecast.current.temperatureC,
-    rain: weatherForecast.current.precipitationMm,
-    humidity: weatherForecast.current.relativeHumidity,
+    temp: weatherForecast?.current?.temperatureC || 20.0,
+    rain: weatherForecast?.current?.precipitationMm || 0.0,
+    humidity: weatherForecast?.current?.relativeHumidity || 50.0,
   };
 
   return {
@@ -43,60 +76,23 @@ const getDynamicFallbackSummary = async () => {
       belgStatus: 'FAVORABLE',
     },
     compositeRiskDistribution: {
-      greenCount: Math.max(0, woredaCount - alertCount - 8),
-      yellowCount: Math.min(alertCount + 5, 8),
-      orangeCount: Math.min(alertCount, 3),
+      greenCount: Math.max(0, woredaCount - alertCount),
+      yellowCount: Math.min(alertCount, 5),
+      orangeCount: Math.min(alertCount, 2),
       redCount: Math.min(alertCount, 1),
     },
-    recentAlerts: [
-      {
-        id: 'alt_live_01',
-        title: 'Meher Season Moisture Deficit Watch',
-        message: 'Mid-season rainfall delay detected via CHIRPS anomaly. Soil moisture dropping below threshold.',
-        severity: 'MODERATE',
-        hazardType: 'DROUGHT',
-        woredaName: 'Adama Rural',
-        zoneName: 'East Shewa',
-        regionName: 'Oromia',
-        isRead: false,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'alt_live_02',
-        title: 'Highland Frost Risk Advisory',
-        message: 'Nighttime temperatures projected to fall to 3.5°C across high-altitude crop zones.',
-        severity: 'WARNING',
-        hazardType: 'FROST',
-        woredaName: 'Tiyo',
-        zoneName: 'Arsi',
-        regionName: 'Oromia',
-        isRead: false,
-        createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-      },
-      {
-        id: 'alt_live_03',
-        title: 'Locust Hopper Band Surveillance Alert',
-        message: 'Scouting report indicates early-instar hopper bands emerging in border grasslands.',
-        severity: 'HIGH',
-        hazardType: 'LOCUST_PEST',
-        woredaName: 'Shinile',
-        zoneName: 'Siti',
-        regionName: 'Somali',
-        isRead: true,
-        createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-      },
-    ],
+    recentAlerts: recentAlertsList,
     weatherSummary: {
       current: {
-        temperature: weatherForecast.current.temperatureC,
-        humidity: weatherForecast.current.relativeHumidity,
-        rainfall: weatherForecast.current.precipitationMm,
-        windSpeed: weatherForecast.current.windSpeedKmh,
-        condition: weatherForecast.current.conditionEn,
-        conditionAm: weatherForecast.current.conditionAm,
-        conditionOm: weatherForecast.current.conditionOm,
+        temperature: weatherForecast?.current?.temperatureC || 20.0,
+        humidity: weatherForecast?.current?.relativeHumidity || 50.0,
+        rainfall: weatherForecast?.current?.precipitationMm || 0.0,
+        windSpeed: weatherForecast?.current?.windSpeedKmh || 10.0,
+        condition: weatherForecast?.current?.conditionEn || 'Clear',
+        conditionAm: weatherForecast?.current?.conditionAm || 'ጥሩ',
+        conditionOm: weatherForecast?.current?.conditionOm || 'Gaarii',
       },
-      forecast: weatherForecast.daily.slice(0, 5).map(d => ({
+      forecast: (weatherForecast?.daily || []).slice(0, 5).map((d) => ({
         date: d.date,
         tempMax: d.maxTempC,
         tempMin: d.minTempC,
@@ -119,26 +115,20 @@ const getDynamicFallbackSummary = async () => {
       totalArea: Math.round(farmCount * 1.8 * 10) / 10,
       farmsAtRisk: alertCount,
       activeSensors: sensorCount,
-      cropDistribution: {
-        'WHEAT': Math.max(1, Math.round(farmCount * 0.35)),
-        'TEFF': Math.max(1, Math.round(farmCount * 0.28)),
-        'MAIZE': Math.max(1, Math.round(farmCount * 0.20)),
-        'BARLEY': Math.max(1, Math.round(farmCount * 0.10)),
-        'PULSES': Math.max(1, Math.round(farmCount * 0.07)),
-      },
+      cropDistribution: {},
     },
     jurisdictionMetrics: {
       totalFarmers: totalFarmers,
       farmsAtRisk: alertCount,
-      fieldVisitsThisWeek: Math.max(4, Math.round(totalDiagnoses * 0.4)),
+      fieldVisitsThisWeek: totalDiagnoses,
       monitoredHectares: Math.round(farmCount * 1.8 * 10) / 10,
       activeSensors: sensorCount,
-      satelliteObservationsCount: 1420,
+      satelliteObservationsCount: 0,
     },
     systemHealth: {
       status: 'OPERATIONAL',
-      activeUsers: Math.max(15, totalFarmers + 10),
-      dataPointsToday: sensorCount * 24 + 180,
+      activeUsers: totalFarmers,
+      dataPointsToday: sensorCount * 24,
       apiHealthy: true,
       lastDataUpdate: new Date().toISOString(),
     },
@@ -242,16 +232,14 @@ async function getDashboardSummary({ role, userId, woredaId, zoneId, regionId } 
         }
       }
 
-      // If composite risk distribution is completely empty, populate realistic proportions
+      // If composite risk distribution is empty, set greenCount to monitored woredas minus active warnings
       if (compositeRiskDistribution.greenCount === 0 &&
           compositeRiskDistribution.yellowCount === 0 &&
           compositeRiskDistribution.orangeCount === 0 &&
           compositeRiskDistribution.redCount === 0) {
-        const baseWoredas = Math.max(monitoredWoredas, 10);
-        compositeRiskDistribution.greenCount = Math.max(1, baseWoredas - activeEarlyWarnings - 2);
-        compositeRiskDistribution.yellowCount = Math.min(activeEarlyWarnings + 2, 6);
-        compositeRiskDistribution.orangeCount = Math.min(activeEarlyWarnings, 2);
-        compositeRiskDistribution.redCount = Math.min(activeEarlyWarnings, 1);
+        compositeRiskDistribution.greenCount = Math.max(0, monitoredWoredas - activeEarlyWarnings);
+        compositeRiskDistribution.yellowCount = Math.min(activeEarlyWarnings, 3);
+        compositeRiskDistribution.redCount = Math.max(0, activeEarlyWarnings - 3);
       }
 
       const vciAggregate = await prisma.satelliteObservation.aggregate({
@@ -372,14 +360,7 @@ async function getDashboardSummary({ role, userId, woredaId, zoneId, regionId } 
           cropDistribution[cg.primaryCrop] = cg._count.id;
         }
       }
-      if (Object.keys(cropDistribution).length === 0) {
-        const base = Math.max(1, totalFarmsRegistered);
-        cropDistribution['WHEAT'] = Math.max(1, Math.round(base * 0.35));
-        cropDistribution['TEFF'] = Math.max(1, Math.round(base * 0.28));
-        cropDistribution['MAIZE'] = Math.max(1, Math.round(base * 0.20));
-        cropDistribution['BARLEY'] = Math.max(1, Math.round(base * 0.10));
-        cropDistribution['PULSES'] = Math.max(1, Math.round(base * 0.07));
-      }
+      // Real crop distribution from database group-by
 
       const farmSummary = {
         totalFarms: totalFarmsRegistered,
@@ -423,13 +404,13 @@ async function getDashboardSummary({ role, userId, woredaId, zoneId, regionId } 
           prisma.satelliteObservation.count({ where: satWhere }),
         ]);
 
-        totalFarmersCount = farmersCount || totalFarmsRegistered || 12;
-        fieldVisitsCount = visitsCount || Math.max(3, Math.round(totalFarmsRegistered * 0.4));
-        observationsCount = obsCount || 340;
+        totalFarmersCount = farmersCount || totalFarmsRegistered || 0;
+        fieldVisitsCount = visitsCount || 0;
+        observationsCount = obsCount || 0;
       } catch (_) {
-        totalFarmersCount = totalFarmsRegistered || 12;
-        fieldVisitsCount = 5;
-        observationsCount = 340;
+        totalFarmersCount = totalFarmsRegistered || 0;
+        fieldVisitsCount = 0;
+        observationsCount = 0;
       }
 
       const jurisdictionMetrics = {
@@ -443,8 +424,8 @@ async function getDashboardSummary({ role, userId, woredaId, zoneId, regionId } 
 
       const systemHealth = {
         status: 'OPERATIONAL',
-        activeUsers: Math.max(18, totalFarmersCount + 8),
-        dataPointsToday: activeSensors * 24 + 210,
+        activeUsers: totalFarmersCount || 1,
+        dataPointsToday: activeSensors * 24,
         apiHealthy: true,
         lastDataUpdate: new Date().toISOString(),
       };
@@ -1062,9 +1043,9 @@ async function getRegionAnalytics(regionId) {
   if (!isConnected()) {
     return {
       type: 'region',
-      region: { id: regionId || 'ET04', nameEn: 'Oromia', nameAm: 'ኦሮሚያ', code: 'ET04' },
-      statistics: { totalZones: 18, totalWoredas: 240, totalFarms: 580, activeSensors: 120, totalSensors: 140, activeAlerts: 4 },
-      riskDistribution: { green: 15, yellow: 8, orange: 3, red: 1 },
+      region: { id: regionId || 'ET04', nameEn: 'Region', nameAm: 'ክልል', code: regionId || 'ET04' },
+      statistics: { totalZones: 0, totalWoredas: 0, totalFarms: 0, activeSensors: 0, totalSensors: 0, activeAlerts: 0 },
+      riskDistribution: { green: 0, yellow: 0, orange: 0, red: 0 },
       zoneBreakdown: [],
     };
   }
@@ -1096,9 +1077,9 @@ async function getRegionAnalytics(regionId) {
     if (!region) {
       return {
         type: 'region',
-        region: { id: regionId || 'ET04', nameEn: 'Oromia', nameAm: 'ኦሮሚያ', code: 'ET04' },
-        statistics: { totalZones: 18, totalWoredas: 240, totalFarms: 580, activeSensors: 120, totalSensors: 140, activeAlerts: 4 },
-        riskDistribution: { green: 15, yellow: 8, orange: 3, red: 1 },
+        region: { id: regionId, nameEn: 'Unknown Region', nameAm: 'ያልታወቀ ክልል', code: regionId },
+        statistics: { totalZones: 0, totalWoredas: 0, totalFarms: 0, activeSensors: 0, totalSensors: 0, activeAlerts: 0 },
+        riskDistribution: { green: 0, yellow: 0, orange: 0, red: 0 },
         zoneBreakdown: [],
       };
     }
@@ -1175,9 +1156,9 @@ async function getRegionAnalytics(regionId) {
     console.error('Error getting region analytics:', error);
     return {
       type: 'region',
-      region: { id: regionId || 'ET04', nameEn: 'Oromia', nameAm: 'ኦሮሚያ', code: 'ET04' },
-      statistics: { totalZones: 18, totalWoredas: 240, totalFarms: 580, activeSensors: 120, totalSensors: 140, activeAlerts: 4 },
-      riskDistribution: { green: 15, yellow: 8, orange: 3, red: 1 },
+      region: { id: regionId, nameEn: 'Region', nameAm: 'ክልል', code: regionId },
+      statistics: { totalZones: 0, totalWoredas: 0, totalFarms: 0, activeSensors: 0, totalSensors: 0, activeAlerts: 0 },
+      riskDistribution: { green: 0, yellow: 0, orange: 0, red: 0 },
       zoneBreakdown: [],
     };
   }
@@ -1241,10 +1222,10 @@ async function getZoneAnalytics(zoneId) {
   if (!isConnected()) {
     return {
       type: 'zone',
-      zone: { id: zoneId || 'zone_east_shewa', nameEn: 'East Shewa', nameAm: 'ምስራቅ ሸዋ' },
-      region: { id: 'ET04', nameEn: 'Oromia' },
-      statistics: { totalWoredas: 12, totalFarms: 210, activeSensors: 45, totalSensors: 50, activeAlerts: 2 },
-      riskDistribution: { green: 8, yellow: 3, orange: 1, red: 0 },
+      zone: { id: zoneId || 'zone', nameEn: 'Zone', nameAm: 'ዞን' },
+      region: null,
+      statistics: { totalWoredas: 0, totalFarms: 0, activeSensors: 0, totalSensors: 0, activeAlerts: 0 },
+      riskDistribution: { green: 0, yellow: 0, orange: 0, red: 0 },
       woredaBreakdown: [],
     };
   }
@@ -1271,10 +1252,10 @@ async function getZoneAnalytics(zoneId) {
     if (!zone) {
       return {
         type: 'zone',
-        zone: { id: zoneId || 'zone_east_shewa', nameEn: 'East Shewa', nameAm: 'ምስራቅ ሸዋ' },
-        region: { id: 'ET04', nameEn: 'Oromia' },
-        statistics: { totalWoredas: 12, totalFarms: 210, activeSensors: 45, totalSensors: 50, activeAlerts: 2 },
-        riskDistribution: { green: 8, yellow: 3, orange: 1, red: 0 },
+        zone: { id: zoneId, nameEn: 'Unknown Zone', nameAm: 'ያልታወቀ ዞን' },
+        region: null,
+        statistics: { totalWoredas: 0, totalFarms: 0, activeSensors: 0, totalSensors: 0, activeAlerts: 0 },
+        riskDistribution: { green: 0, yellow: 0, orange: 0, red: 0 },
         woredaBreakdown: [],
       };
     }
@@ -1352,10 +1333,10 @@ async function getZoneAnalytics(zoneId) {
     console.error('Error getting zone analytics:', error);
     return {
       type: 'zone',
-      zone: { id: zoneId || 'zone_east_shewa', nameEn: 'East Shewa', nameAm: 'ምስራቅ ሸዋ' },
-      region: { id: 'ET04', nameEn: 'Oromia' },
-      statistics: { totalWoredas: 12, totalFarms: 210, activeSensors: 45, totalSensors: 50, activeAlerts: 2 },
-      riskDistribution: { green: 8, yellow: 3, orange: 1, red: 0 },
+      zone: { id: zoneId, nameEn: 'Zone', nameAm: 'ዞን' },
+      region: null,
+      statistics: { totalWoredas: 0, totalFarms: 0, activeSensors: 0, totalSensors: 0, activeAlerts: 0 },
+      riskDistribution: { green: 0, yellow: 0, orange: 0, red: 0 },
       woredaBreakdown: [],
     };
   }
@@ -1427,11 +1408,11 @@ async function getWoredaAnalytics(woredaId) {
   if (!isConnected()) {
     return {
       type: 'woreda',
-      woreda: { id: woredaId || 'ET040101', nameEn: 'Adama Zuria', nameAm: 'አዳማ ዙሪያ' },
-      zone: { id: 'zone_east_shewa', nameEn: 'East Shewa' },
-      region: { id: 'ET04', nameEn: 'Oromia' },
-      statistics: { totalFarms: 42, activeSensors: 15, totalSensors: 18, activeAlerts: 1 },
-      currentConditions: { avgRainfallLast30Days: 45.2, avgNdvi: 0.58, alertLevel: 'WATCH', lastAssessed: new Date().toISOString() },
+      woreda: { id: woredaId, nameEn: 'Woreda', nameAm: 'ወረዳ' },
+      zone: null,
+      region: null,
+      statistics: { totalFarms: 0, activeSensors: 0, totalSensors: 0, activeAlerts: 0 },
+      currentConditions: { avgRainfallLast30Days: 0, avgNdvi: 0, alertLevel: 'NORMAL', lastAssessed: null },
       recentObservations: [],
     };
   }
@@ -1456,11 +1437,11 @@ async function getWoredaAnalytics(woredaId) {
     if (!woreda) {
       return {
         type: 'woreda',
-        woreda: { id: woredaId || 'ET040101', nameEn: 'Adama Zuria', nameAm: 'አዳማ ዙሪያ' },
-        zone: { id: 'zone_east_shewa', nameEn: 'East Shewa' },
-        region: { id: 'ET04', nameEn: 'Oromia' },
-        statistics: { totalFarms: 42, activeSensors: 15, totalSensors: 18, activeAlerts: 1 },
-        currentConditions: { avgRainfallLast30Days: 45.2, avgNdvi: 0.58, alertLevel: 'WATCH', lastAssessed: new Date().toISOString() },
+        woreda: { id: woredaId, nameEn: 'Unknown Woreda', nameAm: 'ያልታወቀ ወረዳ' },
+        zone: null,
+        region: null,
+        statistics: { totalFarms: 0, activeSensors: 0, totalSensors: 0, activeAlerts: 0 },
+        currentConditions: { avgRainfallLast30Days: 0, avgNdvi: 0, alertLevel: 'NORMAL', lastAssessed: null },
         recentObservations: [],
       };
     }
@@ -1538,11 +1519,11 @@ async function getWoredaAnalytics(woredaId) {
     console.error('Error getting woreda analytics:', error);
     return {
       type: 'woreda',
-      woreda: { id: woredaId || 'ET040101', nameEn: 'Adama Zuria', nameAm: 'አዳማ ዙሪያ' },
-      zone: { id: 'zone_east_shewa', nameEn: 'East Shewa' },
-      region: { id: 'ET04', nameEn: 'Oromia' },
-      statistics: { totalFarms: 42, activeSensors: 15, totalSensors: 18, activeAlerts: 1 },
-      currentConditions: { avgRainfallLast30Days: 45.2, avgNdvi: 0.58, alertLevel: 'WATCH', lastAssessed: new Date().toISOString() },
+      woreda: { id: woredaId, nameEn: 'Woreda', nameAm: 'ወረዳ' },
+      zone: null,
+      region: null,
+      statistics: { totalFarms: 0, activeSensors: 0, totalSensors: 0, activeAlerts: 0 },
+      currentConditions: { avgRainfallLast30Days: 0, avgNdvi: 0, alertLevel: 'NORMAL', lastAssessed: null },
       recentObservations: [],
     };
   }

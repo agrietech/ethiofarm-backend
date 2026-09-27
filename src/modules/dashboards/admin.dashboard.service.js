@@ -1,5 +1,6 @@
 const { prisma, isConnected } = require('../../config/db');
 const redis = require('../../config/redis');
+const { getScopedWeatherSummary } = require('./dashboardWeatherHelper');
 
 // Fallback memory cache
 const memoryAdminCache = new Map();
@@ -8,7 +9,7 @@ class AdminDashboardService {
   /**
    * System-Wide Administrative Control Panel
    */
-  async getAdminPanel(_userId) {
+  async getAdminPanel(_userId, user = {}) {
     const cacheKey = 'dashboard:admin:system';
 
     if (redis && typeof redis.get === 'function') {
@@ -23,11 +24,12 @@ class AdminDashboardService {
       }
     }
 
-    const [userCounts, farmCount, alertCount, pendingRoleRequests] = await Promise.all([
+    const [userCounts, farmCount, alertCount, pendingRoleRequests, weatherData] = await Promise.all([
       this.getUserCountsByRole(),
       this.getTotalFarms(),
       this.getTotalAlerts(),
       this.getPendingRoleRequests(),
+      getScopedWeatherSummary({ user }),
     ]);
 
     const mem = process.memoryUsage();
@@ -69,6 +71,9 @@ class AdminDashboardService {
         mfaEnforcedRoles: ['ADMIN', 'REGIONAL_OFFICER', 'ZONAL_OFFICER'],
         suspiciousEventsLast24h: 0,
       },
+
+      // Live Scoped Weather Telemetry
+      weather: weatherData,
     };
 
     // Cache for 60 seconds
@@ -86,11 +91,12 @@ class AdminDashboardService {
   /**
    * Scientific & Agronomic Research Data Dashboard
    */
-  async getResearchDashboard(userId) {
-    const [satelliteObsCount, riskAssessmentsCount, totalFarms] = await Promise.all([
-      prisma.satelliteObservation.count().catch(() => 1420),
-      prisma.riskAssessment.count().catch(() => 310),
-      prisma.farm.count().catch(() => 124),
+  async getResearchDashboard(userId, user = {}) {
+    const [satelliteObsCount, riskAssessmentsCount, totalFarms, weatherData] = await Promise.all([
+      prisma.satelliteObservation.count().catch(() => 0),
+      prisma.riskAssessment.count().catch(() => 0),
+      prisma.farm.count().catch(() => 0),
+      getScopedWeatherSummary({ user }),
     ]);
 
     return {
@@ -106,6 +112,8 @@ class AdminDashboardService {
         ],
         exportFormats: ['GeoJSON', 'CSV', 'Parquet', 'NetCDF'],
       },
+      // Live Scoped Weather Telemetry
+      weather: weatherData,
     };
   }
 

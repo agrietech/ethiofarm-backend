@@ -1,5 +1,6 @@
 const { prisma } = require('../../config/db');
 const redis = require('../../config/redis');
+const { getScopedWeatherSummary } = require('./dashboardWeatherHelper');
 
 // Fallback memory cache
 const memoryOfficerCache = new Map();
@@ -8,7 +9,7 @@ class OfficerDashboardService {
   /**
    * Command Center for Woreda Agricultural Officers
    */
-  async getWoredaCommandCenter(userId, woredaId) {
+  async getWoredaCommandCenter(userId, woredaId, user = {}) {
     const cacheKey = `dashboard:officer:woreda:${woredaId || 'all'}`;
 
     if (redis && typeof redis.get === 'function') {
@@ -33,6 +34,8 @@ class OfficerDashboardService {
       sensorStats,
       developmentAgents,
       riskStats,
+      weatherData,
+      farmDistribution,
     ] = await Promise.all([
       this.getWoredaDetails(woredaId),
       this.getFarmsCount(scope),
@@ -41,6 +44,8 @@ class OfficerDashboardService {
       this.getSensorNetwork(scope),
       this.getDevelopmentAgents(scope),
       this.getRiskHeatmap(scope),
+      getScopedWeatherSummary({ woredaId, user }),
+      this.getFarmDistribution(scope),
     ]);
 
     const dashboard = {
@@ -77,22 +82,7 @@ class OfficerDashboardService {
       riskMap: riskStats,
 
       // Farm distribution and agro-ecological health
-      farmDistribution: {
-        total: farmsCount.count,
-        byCrop: [
-          { crop: 'Teff', percentage: 42, hectares: Math.round(farmsCount.totalArea * 0.42) },
-          { crop: 'Wheat', percentage: 28, hectares: Math.round(farmsCount.totalArea * 0.28) },
-          { crop: 'Maize', percentage: 18, hectares: Math.round(farmsCount.totalArea * 0.18) },
-          { crop: 'Barley', percentage: 8, hectares: Math.round(farmsCount.totalArea * 0.08) },
-          { crop: 'Pulses/Others', percentage: 4, hectares: Math.round(farmsCount.totalArea * 0.04) },
-        ],
-        byScale: {
-          smallholder: Math.round(farmsCount.count * 0.85),
-          mediumScale: Math.round(farmsCount.count * 0.12),
-          commercial: Math.round(farmsCount.count * 0.03),
-        },
-        atRiskCount: Math.round(farmsCount.count * 0.08),
-      },
+      farmDistribution,
 
       // Sensor Network Telemetry Status
       sensorNetwork: sensorStats,
@@ -116,6 +106,9 @@ class OfficerDashboardService {
         { action: 'APPROVE_REQUESTS', label: 'Review Role Upgrades', icon: 'check-circle' },
         { action: 'VIEW_REPORTS', label: 'Generate Woreda Report', icon: 'file-text' },
       ],
+
+      // Live Scoped Weather Telemetry
+      weather: weatherData,
     };
 
     // Cache for 2 minutes
@@ -134,7 +127,7 @@ class OfficerDashboardService {
    * Command Center for Zonal Agricultural Officers
    * Properly scoped: filters all data to woredas within the assigned zone
    */
-  async getZonalCommandCenter(userId, zoneId) {
+  async getZonalCommandCenter(userId, zoneId, user = {}) {
     const cacheKey = `dashboard:officer:zone:${zoneId || 'all'}`;
 
     if (redis && typeof redis.get === 'function') {
@@ -169,6 +162,8 @@ class OfficerDashboardService {
       sensorStats,
       developmentAgents,
       riskStats,
+      weatherData,
+      farmDistribution,
     ] = await Promise.all([
       this.getFarmsCount(scope),
       this.getFarmersCount(scope),
@@ -176,6 +171,8 @@ class OfficerDashboardService {
       this.getSensorNetwork(scope),
       this.getDevelopmentAgents(scope),
       this.getRiskHeatmap(scope),
+      getScopedWeatherSummary({ zoneId, user }),
+      this.getFarmDistribution(scope),
     ]);
 
     const dashboard = {
@@ -200,16 +197,7 @@ class OfficerDashboardService {
         responseTeamsAvailable: 4,
       },
       riskMap: riskStats,
-      farmDistribution: {
-        total: farmsCount.count,
-        byCrop: [
-          { crop: 'Teff', percentage: 42, hectares: Math.round(farmsCount.totalArea * 0.42) },
-          { crop: 'Wheat', percentage: 28, hectares: Math.round(farmsCount.totalArea * 0.28) },
-          { crop: 'Maize', percentage: 18, hectares: Math.round(farmsCount.totalArea * 0.18) },
-          { crop: 'Barley', percentage: 8, hectares: Math.round(farmsCount.totalArea * 0.08) },
-          { crop: 'Pulses/Others', percentage: 4, hectares: Math.round(farmsCount.totalArea * 0.04) },
-        ],
-      },
+      farmDistribution,
       sensorNetwork: sensorStats,
       developmentAgents,
       quickActions: [
@@ -217,6 +205,9 @@ class OfficerDashboardService {
         { action: 'VIEW_REPORTS', label: 'Generate Zone Report', icon: 'file-text' },
         { action: 'APPROVE_REQUESTS', label: 'Review Role Upgrades', icon: 'check-circle' },
       ],
+
+      // Live Scoped Weather Telemetry
+      weather: weatherData,
     };
 
     if (redis && typeof redis.setex === 'function') {
@@ -232,7 +223,7 @@ class OfficerDashboardService {
    * Command Center for Regional Agricultural Officers
    * Properly scoped: filters all data to woredas/zones within the assigned region
    */
-  async getRegionalCommandCenter(userId, regionId) {
+  async getRegionalCommandCenter(userId, regionId, user = {}) {
     const cacheKey = `dashboard:officer:region:${regionId || 'all'}`;
 
     if (redis && typeof redis.get === 'function') {
@@ -266,6 +257,8 @@ class OfficerDashboardService {
       sensorStats,
       developmentAgents,
       riskStats,
+      weatherData,
+      farmDistribution,
     ] = await Promise.all([
       this.getFarmsCount(scope),
       this.getFarmersCount(scope),
@@ -273,6 +266,8 @@ class OfficerDashboardService {
       this.getSensorNetwork(scope),
       this.getDevelopmentAgents(scope),
       this.getRiskHeatmap(scope),
+      getScopedWeatherSummary({ regionId, user }),
+      this.getFarmDistribution(scope),
     ]);
 
     const dashboard = {
@@ -297,16 +292,7 @@ class OfficerDashboardService {
         responseTeamsAvailable: 4,
       },
       riskMap: riskStats,
-      farmDistribution: {
-        total: farmsCount.count,
-        byCrop: [
-          { crop: 'Teff', percentage: 42, hectares: Math.round(farmsCount.totalArea * 0.42) },
-          { crop: 'Wheat', percentage: 28, hectares: Math.round(farmsCount.totalArea * 0.28) },
-          { crop: 'Maize', percentage: 18, hectares: Math.round(farmsCount.totalArea * 0.18) },
-          { crop: 'Barley', percentage: 8, hectares: Math.round(farmsCount.totalArea * 0.08) },
-          { crop: 'Pulses/Others', percentage: 4, hectares: Math.round(farmsCount.totalArea * 0.04) },
-        ],
-      },
+      farmDistribution,
       sensorNetwork: sensorStats,
       developmentAgents,
       quickActions: [
@@ -314,6 +300,9 @@ class OfficerDashboardService {
         { action: 'VIEW_REPORTS', label: 'Generate Region Report', icon: 'file-text' },
         { action: 'APPROVE_REQUESTS', label: 'Review Role Upgrades', icon: 'check-circle' },
       ],
+
+      // Live Scoped Weather Telemetry
+      weather: weatherData,
     };
 
     if (redis && typeof redis.setex === 'function') {
@@ -378,6 +367,51 @@ class OfficerDashboardService {
     return {};
   }
 
+  async getFarmDistribution(scope) {
+    try {
+      const where = this._buildFarmWhere(scope);
+      const [cropGroups, totalCount, totalAreaAgg] = await Promise.all([
+        prisma.farm.groupBy({
+          by: ['primaryCrop'],
+          where,
+          _count: { id: true },
+          _sum: { areaHectares: true },
+        }),
+        prisma.farm.count({ where }),
+        prisma.farm.aggregate({ where, _sum: { areaHectares: true } }),
+      ]);
+
+      const totalFarms = totalCount || 0;
+      const totalArea = totalAreaAgg._sum?.areaHectares || 0.0;
+
+      const byCrop = cropGroups.map((cg) => {
+        const cropName = cg.primaryCrop || 'Other';
+        const count = cg._count?.id || 0;
+        const hectares = cg._sum?.areaHectares || 0.0;
+        const percentage = totalFarms > 0 ? Math.round((count / totalFarms) * 100) : 0;
+        return {
+          crop: cropName.charAt(0).toUpperCase() + cropName.slice(1).toLowerCase(),
+          count,
+          percentage,
+          hectares: Math.round(hectares * 10) / 10,
+        };
+      });
+
+      return {
+        total: totalFarms,
+        byCrop,
+        byScale: {
+          smallholder: totalFarms,
+          mediumScale: 0,
+          commercial: 0,
+        },
+        atRiskCount: 0,
+      };
+    } catch (_e) {
+      return { total: 0, byCrop: [], byScale: { smallholder: 0, mediumScale: 0, commercial: 0 }, atRiskCount: 0 };
+    }
+  }
+
   async getFarmsCount(scope) {
     try {
       const where = this._buildFarmWhere(scope);
@@ -386,11 +420,11 @@ class OfficerDashboardService {
         prisma.farm.aggregate({ where, _sum: { areaHectares: true } }),
       ]);
       return {
-        count: count || 124,
-        totalArea: parseFloat((aggregate._sum.areaHectares || 342.5).toFixed(1)),
+        count: count || 0,
+        totalArea: parseFloat((aggregate._sum.areaHectares || 0.0).toFixed(1)),
       };
     } catch (e) {
-      return { count: 124, totalArea: 342.5 };
+      return { count: 0, totalArea: 0.0 };
     }
   }
 
@@ -399,7 +433,7 @@ class OfficerDashboardService {
       const where = { role: 'FARMER', ...this._buildUserWhere(scope) };
       return await prisma.user.count({ where });
     } catch (e) {
-      return 85;
+      return 0;
     }
   }
 
@@ -416,11 +450,18 @@ class OfficerDashboardService {
     try {
       const where = this._buildSensorWhere(scope);
       const sensors = await prisma.sensor.findMany({ where, select: { id: true, isActive: true } });
-      const total = sensors.length || 36;
-      const active = sensors.filter((s) => s.isActive).length || 32;
-      return { totalSensors: total, activeSensors: active, offlineSensors: total - active, coveragePercent: 88.5, networkHealthScore: 92 };
+      const total = sensors.length;
+      const active = sensors.filter((s) => s.isActive).length;
+      const coverage = total > 0 ? Math.round((active / total) * 1000) / 10 : 0.0;
+      return {
+        totalSensors: total,
+        activeSensors: active,
+        offlineSensors: total - active,
+        coveragePercent: coverage,
+        networkHealthScore: active > 0 ? 100 : 0,
+      };
     } catch (e) {
-      return { totalSensors: 36, activeSensors: 32, offlineSensors: 4, coveragePercent: 88.5, networkHealthScore: 92 };
+      return { totalSensors: 0, activeSensors: 0, offlineSensors: 0, coveragePercent: 0.0, networkHealthScore: 0 };
     }
   }
 
@@ -433,15 +474,19 @@ class OfficerDashboardService {
         take: 10,
       });
       return {
-        totalAgents: agents.length || 8,
-        activeToday: Math.max(1, agents.length - 1) || 7,
+        totalAgents: agents.length,
+        activeToday: agents.length,
         list: agents.map((da, idx) => ({
-          id: da.id, name: da.fullName, kebele: da.kebeleName || `Kebele 0${idx + 1}`,
-          phone: da.phoneNumber, visitsThisWeek: 12 + idx * 2, performanceRating: 4.8,
+          id: da.id,
+          name: da.fullName || `Agent ${idx + 1}`,
+          kebele: da.kebeleName || 'Local Kebele',
+          phone: da.phoneNumber || 'N/A',
+          visitsThisWeek: 0,
+          performanceRating: 5.0,
         })),
       };
     } catch (e) {
-      return { totalAgents: 8, activeToday: 7, list: [] };
+      return { totalAgents: 0, activeToday: 0, list: [] };
     }
   }
 
@@ -449,18 +494,28 @@ class OfficerDashboardService {
     try {
       const where = this._buildRiskWhere(scope);
       const assessments = await prisma.riskAssessment.findMany({
-        where, select: { id: true, overallRisk: true, createdAt: true },
+        where, select: { id: true, alertLevel: true, createdAt: true },
         orderBy: { createdAt: 'desc' }, take: 5,
       });
-      const overall = assessments[0]?.overallRisk || 'MODERATE';
+      const overall = assessments[0]?.alertLevel || 'NORMAL';
+      const alertGroups = await prisma.alert.groupBy({
+        by: ['hazardType'],
+        where: { status: 'ACTIVE', ...this._buildAlertWhere(scope) },
+        _count: { id: true },
+      });
+      const primaryHazards = alertGroups.map((g) => g.hazardType);
       return {
-        overallRiskLevel: overall, primaryHazards: ['DROUGHT', 'VEGETATION_STRESS', 'LOCUST_PEST'],
-        riskTrend: 'STABLE', kebelesHighRisk: ['Kebele 02 - Lowland', 'Kebele 05 - River Basin'],
+        overallRiskLevel: overall,
+        primaryHazards: primaryHazards.length > 0 ? primaryHazards : ['NORMAL_MONITORING'],
+        riskTrend: 'STABLE',
+        kebelesHighRisk: [],
       };
     } catch (e) {
       return {
-        overallRiskLevel: 'MODERATE', primaryHazards: ['DROUGHT', 'VEGETATION_STRESS'],
-        riskTrend: 'STABLE', kebelesHighRisk: ['Kebele 02'],
+        overallRiskLevel: 'NORMAL',
+        primaryHazards: ['NORMAL_MONITORING'],
+        riskTrend: 'STABLE',
+        kebelesHighRisk: [],
       };
     }
   }

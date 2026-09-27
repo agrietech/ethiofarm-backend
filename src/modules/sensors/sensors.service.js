@@ -1,8 +1,8 @@
 const { prisma, isConnected } = require('../../config/db');
 const { BadRequestError, NotFoundError, ForbiddenError, ConflictError, ServiceUnavailableError } = require('../../utils/errors');
 const crypto = require('crypto');
-
 const logger = require('../../utils/logger');
+const { broadcastTelemetry } = require('../../delivery/websocket/riskAssessmentChannel');
 
 // Register or provision an IoT sensor device for an individual farmer or farm
 async function registerSensor({
@@ -253,7 +253,7 @@ async function recordTelemetry({
     throw new BadRequestError('Valid sensorId or registered hardwareId is required to record telemetry');
   }
 
-  return await prisma.sensorReading.create({
+  const reading = await prisma.sensorReading.create({
     data: {
       sensorId: actualSensorId,
       soilMoisture: normalizedMoisture !== null ? Number(normalizedMoisture) : null,
@@ -271,10 +271,24 @@ async function recordTelemetry({
           hardwareId: true,
           sensorType: true,
           farmId: true,
+          farm: {
+            select: {
+              woredaId: true,
+            },
+          },
         },
       },
     },
   });
+
+  // Real-time broadcast to farm plot room, woreda room, and national telemetry
+  broadcastTelemetry({
+    farmId: reading.sensor?.farmId,
+    woredaId: reading.sensor?.farm?.woredaId,
+    reading,
+  });
+
+  return reading;
 }
 
 // Get sensors by farm

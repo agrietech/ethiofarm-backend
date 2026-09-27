@@ -1,30 +1,24 @@
 const farmsService = require('./farms.service');
 const { validateFarmData } = require('../../validation/schemas');
-const { UnauthorizedError } = require('../../utils/errors');
+const { UnauthorizedError, ForbiddenError } = require('../../utils/errors');
+const { assertResourceInScope } = require('../../middleware/scope-filter.utils');
 
 // Shared read authorization for all farm-derived data, including planning,
 // analytics and peer benchmarks. These routes must not expose a farm merely
 // because a caller is authenticated.
+// Delegates jurisdiction checking to the canonical assertResourceInScope()
+// so scope logic lives in a single place (scope-filter.utils.js).
 async function authorizeFarmAccess(req, res, next) {
   try {
     const farm = await farmsService.getFarmById(req.params.id);
     if (!farm) return res.status(404).json({ success: false, error: 'Farm not found' });
 
-    const user = req.user || {};
-    const role = (user.role || '').toUpperCase();
-    const farmZoneId = farm.zoneId || farm.woreda?.zoneId;
-    const farmRegionId = farm.regionId || farm.woreda?.zone?.regionId;
-    const outsideScope =
-      (role === 'FARMER' && farm.userId !== user.id) ||
-      (role === 'DEVELOPMENT_AGENT' && ((user.kebeleId && farm.kebeleId && farm.kebeleId !== user.kebeleId) || (user.woredaId && farm.woredaId !== user.woredaId))) ||
-      (role === 'WOREDA_OFFICER' && user.woredaId && farm.woredaId !== user.woredaId) ||
-      (role === 'ZONAL_OFFICER' && user.zoneId && farmZoneId !== user.zoneId) ||
-      (role === 'REGIONAL_OFFICER' && user.regionId && farmRegionId !== user.regionId);
-
-    if (outsideScope) {
+    try {
+      assertResourceInScope(req.user, farm, 'farm');
+    } catch (scopeErr) {
       return res.status(403).json({
         success: false,
-        error: { message: 'Access denied: farm is outside your permitted scope', code: 'FORBIDDEN' },
+        error: { message: scopeErr.message, code: 'FORBIDDEN' },
       });
     }
 
@@ -86,42 +80,17 @@ async function getFarmDetails(req, res, next) {
     const data = await farmsService.getFarmById(req.params.id);
     if (!data) return res.status(404).json({ success: false, error: 'Farm not found' });
 
-    // ── RBAC: Verify the requesting user has access to this farm ──
-    const user = req.user;
-    const userRole = (user?.role || '').toUpperCase();
-
-    if (userRole === 'FARMER') {
-      // Farmers can only view their own farms
-      if (data.userId && data.userId !== user.id) {
-        return res.status(403).json({ success: false, error: { message: 'Access denied: you can only view your own farms', code: 'FORBIDDEN' } });
-      }
-    } else if (userRole === 'DEVELOPMENT_AGENT') {
-      // DAs can only view farms within their assigned kebele and woreda
-      if (user.kebeleId && data.kebeleId && data.kebeleId !== user.kebeleId) {
-        return res.status(403).json({ success: false, error: { message: 'Access denied: this farm is outside your kebele jurisdiction', code: 'FORBIDDEN' } });
-      }
-      if (user.woredaId && data.woredaId && data.woredaId !== user.woredaId) {
-        return res.status(403).json({ success: false, error: { message: 'Access denied: this farm is outside your woreda jurisdiction', code: 'FORBIDDEN' } });
-      }
-    } else if (userRole === 'WOREDA_OFFICER') {
-      // Woreda Officers can view farms within their woreda
-      if (user.woredaId && data.woredaId && data.woredaId !== user.woredaId) {
-        return res.status(403).json({ success: false, error: { message: 'Access denied: this farm is outside your woreda jurisdiction', code: 'FORBIDDEN' } });
-      }
-    } else if (userRole === 'ZONAL_OFFICER') {
-      // Zonal Officers can view farms within their zone
-      const farmZoneId = data.zoneId || data.woreda?.zoneId;
-      if (user.zoneId && farmZoneId && farmZoneId !== user.zoneId) {
-        return res.status(403).json({ success: false, error: { message: 'Access denied: this farm is outside your zone jurisdiction', code: 'FORBIDDEN' } });
-      }
-    } else if (userRole === 'REGIONAL_OFFICER') {
-      // Regional Officers can view farms within their region
-      const farmRegionId = data.regionId || data.woreda?.zone?.regionId;
-      if (user.regionId && farmRegionId && farmRegionId !== user.regionId) {
-        return res.status(403).json({ success: false, error: { message: 'Access denied: this farm is outside your region jurisdiction', code: 'FORBIDDEN' } });
-      }
+    // ── Scope check: Verify the requesting user has jurisdictional access ──
+    // Delegates to the canonical assertResourceInScope() so scope logic
+    // lives in a single place (scope-filter.utils.js).
+    try {
+      assertResourceInScope(req.user, data, 'farm');
+    } catch (scopeErr) {
+      return res.status(403).json({
+        success: false,
+        error: { message: scopeErr.message, code: 'FORBIDDEN' },
+      });
     }
-    // ADMIN and RESEARCHER have unrestricted access
 
     res.status(200).json({ success: true, data });
   } catch (error) {

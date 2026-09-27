@@ -366,6 +366,7 @@ async function registerUser({
 
   // Send phone verification OTP asynchronously if phone was provided (non-blocking)
   if (resolvedPhone && phoneVerificationCode) {
+    logger.info(`[Auth Service] 🔑 Registration Phone OTP generated for ${resolvedPhone}: [ ${phoneVerificationCode} ]`);
     phoneResendMap.set(resolvedPhone, Date.now());
     try {
       if (redis && typeof redis.setex === 'function') {
@@ -394,7 +395,10 @@ async function registerUser({
     accessToken,
     refreshToken,
     requiresPhoneVerification: Boolean(resolvedPhone && !user.isPhoneVerified),
-    ...(process.env.NODE_ENV === 'test' && phoneVerificationCode ? { phoneVerificationCode } : {}),
+    ...((process.env.NODE_ENV !== 'production' || process.env.NODE_ENV === 'test') && phoneVerificationCode ? {
+      phoneVerificationCode,
+      debugOtp: phoneVerificationCode,
+    } : {}),
   };
 }
 
@@ -1262,6 +1266,8 @@ async function resendPhoneOtp(phoneNumberOrPayload) {
     }
   } catch (_e) {}
 
+  logger.info(`[Auth Service] 🔑 Resent Phone verification OTP for ${canonicalPhone}: [ ${rawOtp} ]`);
+
   // Dispatch SMS
   setImmediate(async () => {
     try {
@@ -1279,7 +1285,11 @@ async function resendPhoneOtp(phoneNumberOrPayload) {
     phoneNumber: formatPhoneForDisplay(canonicalPhone),
     expiresInSeconds: 600,
     cooldownSeconds: 60,
-    ...(process.env.NODE_ENV === 'test' && { code: rawOtp }),
+    ...((process.env.NODE_ENV !== 'production' || process.env.NODE_ENV === 'test') ? {
+      code: rawOtp,
+      debugOtp: rawOtp,
+      phoneVerificationCode: rawOtp,
+    } : {}),
   };
 }
 

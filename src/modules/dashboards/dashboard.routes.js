@@ -20,32 +20,35 @@ router.get('/', authenticate, async (req, res, next) => {
 
     switch (user.role) {
       case 'FARMER':
-        dashboard = await farmerDashboard.getFarmerDashboard(user.id, user.woredaId);
+        dashboard = await farmerDashboard.getFarmerDashboard(user.id, user.woredaId, user);
         break;
 
       case 'DEVELOPMENT_AGENT':
-        dashboard = await agentDashboard.getAgentDashboard(user.id, user.woredaId, user.kebeleId);
+        dashboard = await agentDashboard.getAgentDashboard(user.id, user.woredaId, user.kebeleId, user);
         break;
 
       case 'WOREDA_OFFICER':
-        dashboard = await officerDashboard.getWoredaCommandCenter(user.id, user.woredaId);
+        dashboard = await officerDashboard.getWoredaCommandCenter(user.id, user.woredaId, user);
         break;
 
       case 'ZONAL_OFFICER':
-        dashboard = await officerDashboard.getZonalCommandCenter(user.id, user.zoneId);
+        dashboard = await officerDashboard.getZonalCommandCenter(user.id, user.zoneId, user);
         break;
 
       case 'REGIONAL_OFFICER':
-        dashboard = await officerDashboard.getRegionalCommandCenter(user.id, user.regionId);
+        dashboard = await officerDashboard.getRegionalCommandCenter(user.id, user.regionId, user);
         break;
 
       case 'ADMIN':
+        dashboard = await adminDashboard.getAdminPanel(user.id, user);
+        break;
+
       case 'RESEARCHER':
-        dashboard = await adminDashboard.getAdminPanel(user.id);
+        dashboard = await adminDashboard.getResearchDashboard(user.id, user);
         break;
 
       default:
-        dashboard = await farmerDashboard.getFarmerDashboard(user.id, user.woredaId);
+        dashboard = await farmerDashboard.getFarmerDashboard(user.id, user.woredaId, user);
     }
 
     res.json({
@@ -67,7 +70,7 @@ router.get('/', authenticate, async (req, res, next) => {
  */
 router.get('/farmer', authenticate, authorize('FARMER'), async (req, res, next) => {
   try {
-    const dashboard = await farmerDashboard.getFarmerDashboard(req.user.id, req.user.woredaId);
+    const dashboard = await farmerDashboard.getFarmerDashboard(req.user.id, req.user.woredaId, req.user);
     res.json({ success: true, data: dashboard });
   } catch (error) {
     next(error);
@@ -86,13 +89,13 @@ router.get(
     try {
       let dashboard;
       if (req.user.role === 'DEVELOPMENT_AGENT') {
-        dashboard = await agentDashboard.getAgentDashboard(req.user.id, req.user.woredaId, req.user.kebeleId);
+        dashboard = await agentDashboard.getAgentDashboard(req.user.id, req.user.woredaId, req.user.kebeleId, req.user);
       } else if (req.user.role === 'ZONAL_OFFICER') {
-        dashboard = await officerDashboard.getZonalCommandCenter(req.user.id, req.user.zoneId);
+        dashboard = await officerDashboard.getZonalCommandCenter(req.user.id, req.user.zoneId, req.user);
       } else if (req.user.role === 'REGIONAL_OFFICER') {
-        dashboard = await officerDashboard.getRegionalCommandCenter(req.user.id, req.user.regionId);
+        dashboard = await officerDashboard.getRegionalCommandCenter(req.user.id, req.user.regionId, req.user);
       } else {
-        dashboard = await officerDashboard.getWoredaCommandCenter(req.user.id, req.user.woredaId);
+        dashboard = await officerDashboard.getWoredaCommandCenter(req.user.id, req.user.woredaId, req.user);
       }
       res.json({ success: true, data: dashboard });
     } catch (error) {
@@ -107,7 +110,7 @@ router.get(
  */
 router.get('/admin', authenticate, authorize('ADMIN', 'RESEARCHER'), async (req, res, next) => {
   try {
-    const dashboard = await adminDashboard.getAdminPanel(req.user.id);
+    const dashboard = await adminDashboard.getAdminPanel(req.user.id, req.user);
     res.json({ success: true, data: dashboard });
   } catch (error) {
     next(error);
