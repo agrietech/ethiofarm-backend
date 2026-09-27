@@ -93,9 +93,9 @@ class AdminDashboardService {
    */
   async getResearchDashboard(userId, user = {}) {
     const [satelliteObsCount, riskAssessmentsCount, totalFarms, weatherData] = await Promise.all([
-      prisma.satelliteObservation.count().catch(() => 1420),
-      prisma.riskAssessment.count().catch(() => 310),
-      prisma.farm.count().catch(() => 124),
+      prisma.satelliteObservation.count().catch(() => 0),
+      prisma.riskAssessment.count().catch(() => 0),
+      prisma.farm.count().catch(() => 0),
       getScopedWeatherSummary({ user }),
     ]);
 

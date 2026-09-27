@@ -40,8 +40,11 @@ router.get('/', authenticate, async (req, res, next) => {
         break;
 
       case 'ADMIN':
-      case 'RESEARCHER':
         dashboard = await adminDashboard.getAdminPanel(user.id, user);
+        break;
+
+      case 'RESEARCHER':
+        dashboard = await adminDashboard.getResearchDashboard(user.id, user);
         break;
 
       default:
