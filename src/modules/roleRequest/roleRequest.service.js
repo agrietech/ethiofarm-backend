@@ -384,6 +384,11 @@ async function approveRoleRequest(requestId, reviewerId, reviewerName) {
     }),
   ]);
 
+  try {
+    const redis = require('../../config/redis');
+    await redis.del(`permissions:${request.userId}`);
+  } catch (_e) {}
+
   return updatedRequest;
 }
 
