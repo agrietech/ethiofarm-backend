@@ -126,37 +126,13 @@ async function createFarm({
   throw new ServiceUnavailableError('Database service unavailable for farm creation');
 }
 
-// Get farms by user role & jurisdictional scope
-async function getFarmsByScope(user = {}) {
-  const role = (user.role || 'FARMER').toUpperCase();
-  const userId = user.id;
-  const where = {};
+const { buildFarmScope } = require('../../middleware/scope-filter.utils');
 
-  if (role === 'FARMER') {
-    where.userId = userId;
-  } else if (role === 'DEVELOPMENT_AGENT') {
-    if (user.kebeleId) {
-      where.kebeleId = user.kebeleId;
-    } else if (user.kebeleName) {
-      where.kebele = { nameEn: { equals: user.kebeleName, mode: 'insensitive' } };
-    } else if (user.woredaId) {
-      where.woredaId = user.woredaId;
-    } else if (userId) {
-      where.userId = userId;
-    }
-  } else if (role === 'WOREDA_OFFICER') {
-    if (user.woredaId) {
-      where.woredaId = user.woredaId;
-    }
-  } else if (role === 'ZONAL_OFFICER') {
-    if (user.zoneId) {
-      where.woreda = { zoneId: user.zoneId };
-    }
-  } else if (role === 'REGIONAL_OFFICER') {
-    if (user.regionId) {
-      where.woreda = { zone: { regionId: user.regionId } };
-    }
-  }
+// Get farms by user role & jurisdictional scope.
+// Delegates scope filtering to the canonical buildFarmScope() so jurisdiction
+// logic lives in a single place (scope-filter.utils.js).
+async function getFarmsByScope(user = {}) {
+  const where = buildFarmScope(user);
 
   let farms = await prisma.farm.findMany({
     where,
