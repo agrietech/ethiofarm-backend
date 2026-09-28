@@ -399,6 +399,7 @@ class OfficerDashboardService {
 
       return {
         total: totalFarms,
+        totalArea: Math.round(totalArea * 10) / 10,
         byCrop,
         byScale: {
           smallholder: totalFarms,
@@ -408,7 +409,7 @@ class OfficerDashboardService {
         atRiskCount: 0,
       };
     } catch (_e) {
-      return { total: 0, byCrop: [], byScale: { smallholder: 0, mediumScale: 0, commercial: 0 }, atRiskCount: 0 };
+      return { total: 0, totalArea: 0.0, byCrop: [], byScale: { smallholder: 0, mediumScale: 0, commercial: 0 }, atRiskCount: 0 };
     }
   }
 
