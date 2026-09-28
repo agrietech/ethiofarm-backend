@@ -320,7 +320,7 @@ class FarmerDashboardService {
   getCurrentSeason() {
     const month = new Date().getMonth() + 1; // 1-12
     if (month >= 6 && month <= 9) return { code: 'KIREMT', name: 'Kiremt (Main Rainy Season)', seasonAm: 'ክረምት' };
-    if (month >= 10 && month <= 1) return { code: 'BALEG', name: 'Bega (Harvest & Dry Season)', seasonAm: 'በጋ' };
+    if (month >= 10 || month <= 1) return { code: 'BALEG', name: 'Bega (Harvest & Dry Season)', seasonAm: 'በጋ' };
     return { code: 'BELG', name: 'Belg (Short Rainy Season)', seasonAm: 'በልግ' };
   }
 
