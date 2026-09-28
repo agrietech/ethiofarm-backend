@@ -88,34 +88,95 @@ const INCOMPATIBILITY_RULES = [
 /**
  * Validate Tank Mix Compatibility for given product IDs or names
  */
-function validateTankMixCompatibility({ productIds = [], waterVolumeLiters = 16 }) {
-  if (!Array.isArray(productIds) || productIds.length < 2) {
+/**
+ * Validate Tank Mix Compatibility for given product IDs or names
+ */
+function validateTankMixCompatibility({ productIds = [], products = null, waterVolumeLiters = 16 }) {
+  const rawList = (products && Array.isArray(products) && products.length > 0) ? products : productIds;
+
+  if (!Array.isArray(rawList) || rawList.length < 2) {
     return {
       isValid: true,
       riskLevel: 'SAFE_SINGLE_PRODUCT',
       messageEn: 'Single product selected. No tank-mix incompatibility risk.',
       messageAm: 'አንድ ኬሚካል ብቻ ስለተመረጠ የመደባለቅ አደጋ የለም።',
-      products: productIds,
+      products: rawList,
       walesOrder: [],
       jarTestNeeded: false
     };
   }
 
-  // Map input names or IDs to known registry
-  const matchedProducts = productIds.map(id => {
-    const cleanId = String(id).toLowerCase().trim();
+  // Map input names, IDs, or custom objects to standardized structures
+  const matchedProducts = rawList.map(item => {
+    // 1. Structured custom product object
+    if (typeof item === 'object' && item !== null) {
+      const cleanId = String(item.id || item.name || '').toLowerCase().trim();
+      const found = COMMON_AGROCHEMICALS.find(p => p.id === cleanId || p.name.toLowerCase().includes(cleanId));
+      const formulation = (item.formulation || found?.formulation || 'EC').toUpperCase();
+      return {
+        id: found ? found.id : cleanId.replace(/[^a-z0-9]/g, '_'),
+        name: item.name || found?.name || item.id || 'Custom Chemical',
+        type: item.type || found?.type || 'AGROCHEMICAL',
+        formulation: FORMULATION_TYPES[formulation] ? formulation : 'EC',
+        family: item.family || found?.family || 'Custom Formulation',
+        phRange: item.phRange || found?.phRange || 'Neutral',
+        isCustom: !found
+      };
+    }
+
+    // 2. String processing: support "Product Name:FORMULATION" (e.g. "Atrazine SC:SC")
+    let rawStr = String(item).trim();
+    let explicitFormulation = null;
+    if (rawStr.includes(':')) {
+      const parts = rawStr.split(':');
+      rawStr = parts[0].trim();
+      explicitFormulation = parts[1].trim().toUpperCase();
+    }
+
+    const cleanId = rawStr.toLowerCase();
     const found = COMMON_AGROCHEMICALS.find(p => p.id === cleanId || p.name.toLowerCase().includes(cleanId));
-    if (found) return found;
-    // Default fallback
+    if (found) {
+      return {
+        ...found,
+        formulation: explicitFormulation && FORMULATION_TYPES[explicitFormulation] ? explicitFormulation : found.formulation,
+        isCustom: false
+      };
+    }
+
+    // Fallback for custom named chemical
+    const resolvedFormulation = explicitFormulation && FORMULATION_TYPES[explicitFormulation] ? explicitFormulation : 'EC';
     return {
       id: cleanId.replace(/[^a-z0-9]/g, '_'),
-      name: id,
+      name: rawStr,
       type: 'AGROCHEMICAL',
-      formulation: 'EC',
-      family: 'Unknown',
-      phRange: 'Neutral'
+      formulation: resolvedFormulation,
+      family: 'Custom Compound',
+      phRange: 'Neutral',
+      isCustom: true
     };
   });
+
+  // Helper to test if product matches an incompatibility rule keyword
+  function matchesRuleParticipant(product, ruleKey) {
+    const key = ruleKey.toLowerCase();
+    const pId = product.id.toLowerCase();
+    const pName = product.name.toLowerCase();
+    const pFamily = (product.family || '').toLowerCase();
+
+    if (pId === key || pId.includes(key)) return true;
+    if (pName.includes(key)) return true;
+
+    // Semantic keyword mapping
+    if (key.includes('copper') && (pName.includes('copper') || pName.includes('kocide') || pFamily.includes('copper'))) return true;
+    if (key.includes('2_4_d') && (pName.includes('2,4-d') || pName.includes('2_4_d') || pName.includes('2 4 d') || pFamily.includes('auxin'))) return true;
+    if (key.includes('dimethoate') && pName.includes('dimethoate')) return true;
+    if (key.includes('calcium') && (pName.includes('calcium') || pFamily.includes('calcium'))) return true;
+    if (key.includes('phosphate') && (pName.includes('phosphate') || pName.includes('map') || pFamily.includes('phosphate'))) return true;
+    if (key.includes('urea') && (pName.includes('urea') || pFamily.includes('nitrogen'))) return true;
+    if (key.includes('roundup') && (pName.includes('glyphosate') || pName.includes('roundup'))) return true;
+
+    return false;
+  }
 
   const conflicts = [];
   let highestRisk = 'SAFE';
@@ -126,8 +187,8 @@ function validateTankMixCompatibility({ productIds = [], waterVolumeLiters = 16 
       const p2 = matchedProducts[j];
 
       const rule = INCOMPATIBILITY_RULES.find(r => 
-        (r.pair[0] === p1.id && r.pair[1] === p2.id) ||
-        (r.pair[1] === p1.id && r.pair[0] === p2.id)
+        (matchesRuleParticipant(p1, r.pair[0]) && matchesRuleParticipant(p2, r.pair[1])) ||
+        (matchesRuleParticipant(p1, r.pair[1]) && matchesRuleParticipant(p2, r.pair[0]))
       );
 
       if (rule) {
