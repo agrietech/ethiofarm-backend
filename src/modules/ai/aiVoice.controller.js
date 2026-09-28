@@ -35,6 +35,14 @@ async function handleVoiceInquiry(req, res, next) {
 
     const host = req.get('host');
     const baseUrl = host ? `${req.protocol}://${host}` : null;
+    const userRole = req.user?.role || req.body?.userRole || req.body?.role || req.query?.role || 'FARMER';
+    const userName = req.user?.fullName || req.body?.userName || null;
+    const userJurisdiction = {
+      region: req.user?.region?.name || req.body?.region,
+      zone: req.user?.zone?.name || req.body?.zone,
+      woreda: req.user?.woreda?.name || req.body?.woreda,
+      kebele: req.user?.kebele?.name || req.body?.kebele,
+    };
 
     const result = await aiVoiceService.processVoiceInquiry({
       userQuestion,
@@ -43,6 +51,9 @@ async function handleVoiceInquiry(req, res, next) {
       language: lang,
       farmContext,
       userId: req.user?.id || null,
+      userRole,
+      userName,
+      userJurisdiction,
       baseUrl,
     });
 
