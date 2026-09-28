@@ -1,4 +1,69 @@
 const analyticsService = require('./analytics.service');
+const { ForbiddenError } = require('../../utils/errors');
+const { prisma } = require('../../config/db');
+
+/**
+ * Validates and locks down requested woreda to the user's jurisdictional scope.
+ * Prevents horizontal privilege escalation across woredas, zones, and regions.
+ */
+async function resolveAndValidateWoredaScope(user, requestedWoredaId) {
+  if (!user || ['ADMIN', 'RESEARCHER'].includes(user.role)) {
+    return requestedWoredaId || null;
+  }
+
+  const role = (user.role || '').toUpperCase();
+
+  // Farmer, DA, Woreda Officer are strictly locked to their assigned woreda
+  if (role === 'FARMER' || role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER') {
+    if (!user.woredaId) {
+      throw new ForbiddenError('No administrative woreda assigned to your account');
+    }
+    if (requestedWoredaId && requestedWoredaId !== user.woredaId) {
+      throw new ForbiddenError(`Access restricted: woreda '${requestedWoredaId}' is outside your assigned jurisdiction`);
+    }
+    return user.woredaId;
+  }
+
+  // Zonal Officer: bounded to woredas within their assigned zone
+  if (role === 'ZONAL_OFFICER') {
+    if (!user.zoneId) {
+      throw new ForbiddenError('No administrative zone assigned to your account');
+    }
+    if (requestedWoredaId) {
+      const w = await prisma.woreda.findUnique({ where: { id: requestedWoredaId }, select: { zoneId: true } });
+      if (!w || w.zoneId !== user.zoneId) {
+        throw new ForbiddenError(`Access restricted: woreda '${requestedWoredaId}' is outside your assigned zone jurisdiction`);
+      }
+      return requestedWoredaId;
+    }
+    const firstWoreda = await prisma.woreda.findFirst({ where: { zoneId: user.zoneId }, select: { id: true } });
+    return firstWoreda ? firstWoreda.id : null;
+  }
+
+  // Regional Officer: bounded to woredas within their assigned region
+  if (role === 'REGIONAL_OFFICER') {
+    if (!user.regionId) {
+      throw new ForbiddenError('No administrative region assigned to your account');
+    }
+    if (requestedWoredaId) {
+      const w = await prisma.woreda.findUnique({
+        where: { id: requestedWoredaId },
+        select: { zone: { select: { regionId: true } } },
+      });
+      if (!w || w.zone?.regionId !== user.regionId) {
+        throw new ForbiddenError(`Access restricted: woreda '${requestedWoredaId}' is outside your assigned regional jurisdiction`);
+      }
+      return requestedWoredaId;
+    }
+    const firstWoreda = await prisma.woreda.findFirst({
+      where: { zone: { regionId: user.regionId } },
+      select: { id: true },
+    });
+    return firstWoreda ? firstWoreda.id : null;
+  }
+
+  return requestedWoredaId || null;
+}
 
 async function getDashboardSummary(req, res, next) {
   try {
@@ -10,6 +75,7 @@ async function getDashboardSummary(req, res, next) {
       woredaId: user.woredaId || null,
       zoneId: user.zoneId || null,
       regionId: user.regionId || null,
+      kebeleId: user.kebeleId || null,
     });
     res.status(200).json({ success: true, data });
   } catch (error) {
@@ -21,7 +87,7 @@ async function getRegionalBreakdown(req, res, next) {
   try {
     const user = req.user || {};
     const role = (user.role || '').toUpperCase();
-    const regionId = role === 'REGIONAL_OFFICER' ? user.regionId : null;
+    const regionId = ['ADMIN', 'RESEARCHER'].includes(role) ? null : user.regionId;
     const data = await analyticsService.getRegionalBreakdown(regionId);
     res.status(200).json({ success: true, data });
   } catch (error) {
@@ -32,12 +98,7 @@ async function getRegionalBreakdown(req, res, next) {
 async function getTemporalTrends(req, res, next) {
   try {
     let { timeframe, woredaId, includeAi, language } = req.query;
-    const user = req.user;
-    if (user && !['ADMIN', 'RESEARCHER'].includes(user.role)) {
-      if (user.role === 'FARMER' || user.role === 'DEVELOPMENT_AGENT' || user.role === 'WOREDA_OFFICER') {
-        woredaId = user.woredaId;
-      }
-    }
+    woredaId = await resolveAndValidateWoredaScope(req.user, woredaId);
     const data = await analyticsService.getTemporalTrends({
       timeframe,
       woredaId,
@@ -53,12 +114,7 @@ async function getTemporalTrends(req, res, next) {
 async function getAgronomicAdvisories(req, res, next) {
   try {
     let { cropType, season, woredaId } = req.query;
-    const user = req.user;
-    if (user && !['ADMIN', 'RESEARCHER'].includes(user.role)) {
-      if (user.role === 'FARMER' || user.role === 'DEVELOPMENT_AGENT' || user.role === 'WOREDA_OFFICER') {
-        woredaId = user.woredaId;
-      }
-    }
+    woredaId = await resolveAndValidateWoredaScope(req.user, woredaId);
     const data = await analyticsService.getAgronomicAdvisories({
       cropType,
       season,
@@ -73,7 +129,8 @@ async function getAgronomicAdvisories(req, res, next) {
 async function getAiInsights(req, res, next) {
   try {
     const params = req.method === 'GET' ? req.query : (req.body || {});
-    const { woredaId, timeframe, language, metrics } = params;
+    let { woredaId, timeframe, language, metrics } = params;
+    woredaId = await resolveAndValidateWoredaScope(req.user, woredaId);
     const parsedMetrics = typeof metrics === 'string' ? metrics.split(',').map(m => m.trim()) : metrics;
     const data = await analyticsService.getAiInsights({
       woredaId,
@@ -299,6 +356,7 @@ async function exportData(req, res, next) {
 }
 
 module.exports = {
+  resolveAndValidateWoredaScope,
   getDashboardSummary,
   getRegionalBreakdown,
   getTemporalTrends,
