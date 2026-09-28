@@ -1658,7 +1658,9 @@ CORE DIRECTIVES:
         `**4. 🛡️ ዘላቂ የአፈርና እርሻ ጥበቃ፡**\n` +
         `• ውሃ በሚተኛበት አፈር ላይ የፍሳሽ ቦይ ያዘጋጁ፤ አፈሩ እንዳይደርቅ በደረቅ ገለባ ይሸፍኑ። ከአካባቢዎ የልማት ጣቢያ ባለሙያ ጋር ይመካከሩ።`;
       action = 'Conduct field scouting, apply balanced NPS/Urea fertilizer, and maintain drainage furrows.';
-    // Calibrate role-specific expert commentary on dynamic fallback
+    }
+
+    // Calibrate role-specific expert commentary (applies to ALL crop/topic branches)
     const roleKey = (userRole || 'FARMER').toUpperCase().replace(/[-\s]/g, '_');
     if (roleKey === 'RESEARCHER') {
       responseEn += `\n\n**🔬 Research Trial Benchmarks:**\n• Validate treatments via RCBD field replication. Benchmark against EthioSIS micro-nutrient datasets and Ethiopian Institute of Agricultural Research (EIAR) varietal release registers.`;
