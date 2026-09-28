@@ -9,7 +9,7 @@ function getFarmService() {
 async function handleVoiceInquiry(req, res, next) {
   try {
     const { audioTranscript, language } = req.body || {};
-    const userQuestion = req.body?.userQuestion || req.body?.question || req.body?.prompt || req.body?.text || req.query?.question || null;
+    const userQuestion = req.body?.userQuestion || req.body?.textQuestion || req.body?.question || req.body?.prompt || req.body?.text || req.query?.question || req.query?.textQuestion || null;
     const audioFile = req.file || null;
     const lang = language || req.query.lang || req.user?.preferredLang || 'am';
 

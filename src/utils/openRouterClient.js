@@ -983,7 +983,7 @@ ${farmInfo}CORE DIRECTIVES:
       messages,
       temperature: 0.2,
       responseFormat: 'json',
-      maxTokens: 2500,
+      maxTokens: 800,
     });
 
     if (result?.content) {
