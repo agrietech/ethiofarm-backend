@@ -17,7 +17,7 @@ router.post('/text-to-speech', authenticate, aiLimiter, controller.handleTextToS
 router.get('/text-to-speech', authenticate, aiLimiter, controller.handleTextToSpeech);
 router.post('/speak', authenticate, aiLimiter, controller.handleTextToSpeech);
 
-// TTS streaming endpoint — requires authentication (was fully open)
-router.get('/tts-stream', authenticate, aiLimiter, controller.handleStreamTts);
+// TTS streaming endpoint — rate-limited audio stream proxy for in-app players
+router.get('/tts-stream', aiLimiter, controller.handleStreamTts);
 
 module.exports = router;

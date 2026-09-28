@@ -948,35 +948,97 @@ JSON schema:
   }
 
   /**
-   * Process Farmer Voice Inquiries in Amharic & English
+   * Helper to build enterprise role-calibrated directive for AI Agronomic Assistant
    */
-  async processVoiceInquiry({ userQuestion, farmContextSummary = null, audioTranscript, audioBase64: _audioBase64, mimeType: _mimeType, language = 'am' }) {
+  _getRoleExpertDirective(userRole = 'FARMER', userJurisdiction = null, isAm = false) {
+    const roleKey = (userRole || 'FARMER').toUpperCase().replace(/[-\s]/g, '_');
+    const jurisdiction = userJurisdiction
+      ? `\nJurisdiction Scope: ${[userJurisdiction.region, userJurisdiction.zone, userJurisdiction.woreda, userJurisdiction.kebele].filter(Boolean).join(' > ')}`
+      : '';
+
+    switch (roleKey) {
+      case 'RESEARCHER':
+        return `4. USER ROLE & ENTERPRISE EXPERTISE TIER [RESEARCHER / AG-SCIENTIST]:${jurisdiction}
+You are conversing with an Agronomy Researcher / Scientist.
+- Provide advanced scientific rigor, citing botanical Latin binomials (e.g. Puccinia graminis, Spodoptera frugiperda, Eragrostis tef, Triticum aestivum), varietal genetic traits (e.g. Quncho, Kakaba, Ogolcho), physiological pathways, and randomized control field trial methodologies.
+- Detail soil chemistry parameters grounded in the Ethiopian Soil Information System (EthioSIS), including CEC (meq/100g), pH buffering, macro/micronutrient (N, P, K, S, B, Zn) dynamics, and statistical benchmarks.`;
+
+      case 'REGIONAL_OFFICER':
+        return `4. USER ROLE & ENTERPRISE EXPERTISE TIER [REGIONAL AGRONOMY LEAD / OFFICER]:${jurisdiction}
+You are conversing with a Regional Agronomy Lead / Officer.
+- Deliver high-level, executive strategic agronomic leadership. Address regional food security forecasting, cross-zonal input distribution (seed, NPS-B, Urea), macro-disaster resilience (drought, flood), and agricultural policy execution across agro-ecological zones (Dega, Weyna Dega, Kolla).
+- Provide strategic summaries for regional bureau leadership and contingency reserves.`;
+
+      case 'ZONAL_OFFICER':
+        return `4. USER ROLE & ENTERPRISE EXPERTISE TIER [ZONAL AG COORDINATOR / OFFICER]:${jurisdiction}
+You are conversing with a Zonal Agriculture Coordinator / Officer.
+- Provide cross-woreda spatial and operational coordination. Focus on inter-woreda resource allocation, crop pest containment cordons, spatial GIS hazard telemetry, early warning thresholds, and emergency input buffer management.`;
+
+      case 'WOREDA_OFFICER':
+        return `4. USER ROLE & ENTERPRISE EXPERTISE TIER [WOREDA AGRONOMY OFFICER]:${jurisdiction}
+You are conversing with a Woreda Agronomy Officer.
+- Focus on district-level agricultural operations, woreda seed and fertilizer quotas, kebele extension deployment, cooperative union coordination, local weather hazard mitigation, and extension supervision.`;
+
+      case 'DEVELOPMENT_AGENT':
+        return `4. USER ROLE & ENTERPRISE EXPERTISE TIER [KEBELE EXTENSION WORKER / DEVELOPMENT AGENT (DA)]:${jurisdiction}
+You are conversing with a Frontline Kebele Extension Development Agent.
+- Provide practical extension methodologies, farmer demonstration plot setups, crop scouting rubrics, Economic Threshold Levels (ETL) for pest intervention, backpack sprayer calibration, and farmer advisory pedagogy.`;
+
+      case 'ADMIN':
+        return `4. USER ROLE & ENTERPRISE EXPERTISE TIER [SYSTEM ADMINISTRATOR / GOVERNANCE LEAD]:${jurisdiction}
+You are conversing with an Enterprise System Administrator.
+- Provide platform-wide intelligence, data telemetry verification, regional operational integrity, multi-hazard early warning synchronization, audit compliance, and system health oversight.`;
+
+      case 'FARMER':
+      default:
+        return `4. USER ROLE & ENTERPRISE EXPERTISE TIER [AGRICULTURAL PRODUCER / FARMER]:${jurisdiction}
+You are conversing with a practicing Ethiopian Farmer / Producer.
+- Deliver direct, highly practical, and actionable step-by-step guidance. Provide exact application rates per 15L knapsack or per hectare, planting dates, row spacing, safe chemical handling, and immediate field actions tailored to local agro-ecologies.`;
+    }
+  }
+
+  /**
+   * Process Enterprise AI Voice & Text Inquiries across All Roles (Amharic & English)
+   */
+  async processVoiceInquiry({
+    userQuestion,
+    farmContextSummary = null,
+    audioTranscript,
+    audioBase64: _audioBase64,
+    mimeType: _mimeType,
+    language = 'am',
+    userRole = 'FARMER',
+    userName = null,
+    userJurisdiction = null,
+  }) {
     const textQuery = userQuestion || audioTranscript || 'የሰብል እንክብካቤ እና የበሽታ መከላከል መመሪያ ቢነግሩኝ?';
     const isAm = language === 'am' || /[\u1200-\u137F]/.test(textQuery);
     const farmInfo = farmContextSummary ? `The farmer's registered crops are: ${farmContextSummary}. Use this background when relevant.\n` : '';
+    const roleDirective = this._getRoleExpertDirective(userRole, userJurisdiction, isAm);
 
-    const systemPrompt = `You are EthioFarm's Chief Agronomic AI Specialist and Voice Assistant for Ethiopian Agriculture.
-${farmInfo}CORE DIRECTIVES:
-1. GREETINGS & SOCIAL ICEBREAKERS: For casual greetings (e.g., "hello", "hi", "selam", "ሰላም", "ጤና ይስጥልኝ"), reply warmly and courteously in both English and Amharic, briefly welcoming the farmer and asking how you can help with their crops, soil, pests, or livestock today.
-2. FARMING & AGRONOMIC INQUIRIES: For ANY questions about crops (Teff, Wheat, Maize, Coffee, Barley, Sorghum, Tomato, Potato, Onion, Pepper, Avocado, Enset, etc.), plant diseases, insect pests, weeds, soil health, fertilizers (NPS-B, Urea, Compost, Lime), irrigation, livestock (dairy cows, poultry, sheep, goats), weather advisories, or post-harvest storage:
-   - Provide COMPREHENSIVE, authoritative, and practical advice grounded in Ethiopian agro-ecological conditions (Highlands/Dega, Midlands/Weyna Dega, Lowlands/Kolla).
+    const systemPrompt = `You are EthioFarm's Chief Enterprise Agronomic AI Specialist and Voice Assistant for Ethiopian Agriculture.
+${farmInfo}${roleDirective}
+
+CORE DIRECTIVES:
+1. GREETINGS & SOCIAL ICEBREAKERS: For casual greetings (e.g., "hello", "hi", "selam", "ሰላም", "ጤና ይስጥልኝ"), reply warmly and courteously in both English and Amharic, acknowledging their operational role (${userRole}) and asking how you can assist their agricultural responsibilities today.
+2. ENTERPRISE ROLE-SPECIFIC EXPERT GUIDANCE: Ground all advice in Ethiopian agro-ecological conditions (Highlands/Dega, Midlands/Weyna Dega, Lowlands/Kolla). Calibrate depth, technical vocabulary, and action items directly to the user's role (${userRole}):
    - Structure responses clearly with Markdown:
-     • 🔍 Overview & Diagnosis: Direct explanation, symptoms, and causes.
-     • 📋 Actionable Steps: Step-by-step guidance (sowing/planting dates, seed rates kg/ha, row/plant spacing).
-     • 💊 Inputs & Dosages: Exact fertilizer rates (NPS-B basal, Urea split schedules) and chemical/biological control (specific chemical names e.g., Tilt 250 EC, Ridomil Gold MZ, Ampligo 150 ZC, Mancozeb 80% WP, dosages per ha or per 15L knapsack, timing, and pre-harvest safety intervals).
+     • 🔍 Overview & Diagnosis: Direct explanation, symptoms, causes, or strategic context.
+     • 📋 Actionable Steps: Step-by-step guidance tailored to the user's authority and operational capacity.
+     • 💊 Inputs, Dosages & Technical Specs: Exact fertilizer rates (NPS-B basal, Urea split schedules) and chemical/biological control (specific chemical names e.g., Tilt 250 EC, Ridomil Gold MZ, Ampligo 150 ZC, Mancozeb 80% WP, dosages per ha or per 15L knapsack, timing, and pre-harvest intervals).
      • 🛡️ Preventative Practices: Soil conservation, crop rotation, sanitation, or moisture harvesting.
 3. OUTPUT FORMAT: You MUST return valid JSON ONLY with these exact fields:
 {
   "responseAm": "የተሟላ፣ ደረጃ በደረጃ የተብራራ ሳይንሳዊ የአማርኛ የግብርና መመሪያ (የሰብል እንክብካቤ፣ የተባይና የበሽታ መከላከያ መድሃኒት ስሞችና መጠኖች፣ የማዳበሪያ አጠቃቀም)።",
   "responseEn": "Comprehensive, step-by-step scientific agronomic advisory in English with detailed inputs, chemical dosages, application timings, and cultural practices.",
-  "recommendedAction": "Concise 1-sentence high-priority immediate action step for the farmer.",
+  "recommendedAction": "Concise 1-sentence high-priority immediate action step for the user.",
   "transcription": "${textQuery.replace(/"/g, "'")}",
   "detectedLanguage": "${isAm ? 'Amharic' : 'English'}"
 }`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: `Farmer Query (${isAm ? 'Amharic' : 'English'}): "${textQuery}"` },
+      { role: 'user', content: `[User Role: ${userRole}] Query (${isAm ? 'Amharic' : 'English'}): "${textQuery}"` },
     ];
 
     const result = await this.chatCompletion({
@@ -993,7 +1055,7 @@ ${farmInfo}CORE DIRECTIVES:
           success: true,
           data: {
             ...extracted,
-            aiModel: result.model || 'EthioFarm Agronomic AI Engine',
+            aiModel: result.model || 'EthioFarm Enterprise Agronomic AI Engine',
           },
           isOfflineFallback: Boolean(result.isOfflineFallback),
           degradedReason: result.degradedReason || null,
@@ -1003,7 +1065,7 @@ ${farmInfo}CORE DIRECTIVES:
 
     return {
       success: true,
-      data: this._generateDynamicVoiceResponse(textQuery, language),
+      data: this._generateDynamicVoiceResponse(textQuery, language, userRole),
       isOfflineFallback: true,
       degradedReason: result?.degradedReason || 'Live AI rate limit reached; verified agronomic advisory engaged',
     };
@@ -1024,11 +1086,13 @@ ${farmInfo}CORE DIRECTIVES:
       };
     }
 
-    if (text.includes('Farmer Query') || text.includes('Farmer Voice Inquiry')) {
+    if (text.includes('Query (') || text.includes('Farmer Query') || text.includes('Voice Inquiry') || text.includes('User Role:')) {
       const queryMatch = text.match(/"([^"]+)"/) || text.match(/:\s*(.+)$/);
       const queryText = queryMatch ? queryMatch[1].trim() : text;
       const lang = /[\u1200-\u137F]/.test(queryText) ? 'am' : 'en';
-      const dynamicData = this._generateDynamicVoiceResponse(queryText, lang);
+      const roleMatch = text.match(/User Role:\s*([A-Z_]+)/i);
+      const userRole = roleMatch ? roleMatch[1].toUpperCase() : 'FARMER';
+      const dynamicData = this._generateDynamicVoiceResponse(queryText, lang, userRole);
       return {
         success: true,
         content: JSON.stringify(dynamicData),
@@ -1060,7 +1124,7 @@ ${farmInfo}CORE DIRECTIVES:
    * Evaluates any farmer question dynamically and constructs scientifically verified,
    * localized Ethiopian agricultural advisory in both Amharic and English.
    */
-  _generateDynamicVoiceResponse(queryText = '', preferredLang = 'am') {
+  _generateDynamicVoiceResponse(queryText = '', preferredLang = 'am', userRole = 'FARMER') {
     const cleanText = (queryText || '').replace(/\[farmer's crops:[^\]]*\]/gi, '').trim();
     const q = cleanText.toLowerCase();
     const isAmharicInput = /[\u1200-\u137F]/.test(cleanText);
@@ -1594,6 +1658,20 @@ ${farmInfo}CORE DIRECTIVES:
         `**4. 🛡️ ዘላቂ የአፈርና እርሻ ጥበቃ፡**\n` +
         `• ውሃ በሚተኛበት አፈር ላይ የፍሳሽ ቦይ ያዘጋጁ፤ አፈሩ እንዳይደርቅ በደረቅ ገለባ ይሸፍኑ። ከአካባቢዎ የልማት ጣቢያ ባለሙያ ጋር ይመካከሩ።`;
       action = 'Conduct field scouting, apply balanced NPS/Urea fertilizer, and maintain drainage furrows.';
+    // Calibrate role-specific expert commentary on dynamic fallback
+    const roleKey = (userRole || 'FARMER').toUpperCase().replace(/[-\s]/g, '_');
+    if (roleKey === 'RESEARCHER') {
+      responseEn += `\n\n**🔬 Research Trial Benchmarks:**\n• Validate treatments via RCBD field replication. Benchmark against EthioSIS micro-nutrient datasets and Ethiopian Institute of Agricultural Research (EIAR) varietal release registers.`;
+      responseAm += `\n\n**🔬 የምርምርና የመስክ ሙከራ ማስታወሻ፡**\n• የግብርና ምርምር ሙከራዎችን በRCBD ዘዴ ይተግብሩ፤ ከኢትዮጵያ የግብርና ምርምር ኢንስቲትዩት (EIAR) የምርጥ ዘር ዝርዝር እና የአፈር ለምነት መረጃ (EthioSIS) ጋር ያገናዝቡ።`;
+    } else if (roleKey === 'DEVELOPMENT_AGENT') {
+      responseEn += `\n\n**🧑‍🌾 Kebele Extension Protocols:**\n• Demonstrate this agronomic procedure on kebele demonstration plots. Train local farmer development groups during scheduled community field days.`;
+      responseAm += `\n\n**🧑‍🌾 የልማት ጣቢያ (DA) የማስፋፊያ መመሪያ፡**\n• ይህንን የግብርና አሰራር በቀበሌው የማሳያ ማሳዎች ላይ በተግባር ለአርሶ አደሮች ያሳዩ፤ በማህበረሰብ የስልጠና መድረኮች ላይ ያጋሩ።`;
+    } else if (['WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER'].includes(roleKey)) {
+      responseEn += `\n\n**🏛️ District & Regional Coordination:**\n• Verify input allocations (NPS-B/Urea) and buffer seed stock availability for designated kebeles within your administrative jurisdiction.`;
+      responseAm += `\n\n**🏛️ አስተዳደራዊ ቅንጅትና ግብዓት ክትትል፡**\n• በስራ ወሰንዎ ውስጥ ለሚገኙ ቀበሌዎች የተመደበውን የማዳበሪያ (NPS-B/ዩሪያ) እና የምርጥ ዘር አቅርቦት ስርጭት መዝገብ ይከታተሉ።`;
+    } else if (roleKey === 'ADMIN') {
+      responseEn += `\n\n**🛡️ System Governance & Telemetry:**\n• Monitor woreda-level telemetry feeds and early-warning hazard indicators in the national governance console.`;
+      responseAm += `\n\n**🛡️ የስርዓት አስተዳደርና ክትትል፡**\n• የወረዳዎችን የቴሌሜትሪ መረጃዎችና የአደጋ ቅድመ ማስጠንቀቂያ አመልካቾችን በዋናው የአስተዳደር ገጽ ይከታተሉ።`;
     }
 
     return {

@@ -23,7 +23,18 @@ function cleanTextForSpeech(text) {
  * AI Voice & Speech Service
  * Supports Amharic (አማርኛ) and English farmer voice inquiries and audio synthesis.
  */
-async function processVoiceInquiry({ userQuestion, audioTranscript, audioFile, language = 'am', farmContext = null, userId = null, baseUrl = null }) {
+async function processVoiceInquiry({
+  userQuestion,
+  audioTranscript,
+  audioFile,
+  language = 'am',
+  farmContext = null,
+  userId = null,
+  userRole = 'FARMER',
+  userName = null,
+  userJurisdiction = null,
+  baseUrl = null,
+}) {
   let audioBase64 = null;
   let mimeType = 'audio/wav';
 
@@ -55,7 +66,7 @@ async function processVoiceInquiry({ userQuestion, audioTranscript, audioFile, l
     logger.debug(`[AIVoiceService] Farm context available for userId=${userId}: ${farmContextSummary}`);
   }
 
-  logger.info(`[AIVoiceService] Processing voice inquiry in language=${language}: "${cleanQuery.substring(0, 60)}"`);
+  logger.info(`[AIVoiceService] Processing voice/text inquiry (role=${userRole}) in language=${language}: "${cleanQuery.substring(0, 60)}"`);
 
   const aiResult = await openRouterClient.processVoiceInquiry({
     userQuestion: cleanQuery,
@@ -64,6 +75,9 @@ async function processVoiceInquiry({ userQuestion, audioTranscript, audioFile, l
     audioBase64,
     mimeType,
     language,
+    userRole,
+    userName,
+    userJurisdiction,
   });
 
 
