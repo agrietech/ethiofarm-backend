@@ -75,7 +75,7 @@ async function testSuite() {
 
   for (const t of tests) {
     try {
-      let req = requester[t.method](t.url);
+      let req = requester[t.method](t.url).timeout({ response: 60000, deadline: 75000 });
       req = req.set('x-e2e-test-key', testSecret);
       if (t.auth) {
         req = req.set('Authorization', `Bearer ${testToken}`);

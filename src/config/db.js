@@ -72,10 +72,10 @@ const pool = new Pool({
   lookup: (hostname, _options, callback) => {
     dns.lookup(hostname, { family: 4 }, callback);
   },
-  max: 5, // Keep connection count safely within Supabase pool limit
+  max: 10, // Maintain resilient connection pool
   min: env.NODE_ENV === 'test' ? 0 : 1,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 15000,
+  connectionTimeoutMillis: 30000,
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
 });

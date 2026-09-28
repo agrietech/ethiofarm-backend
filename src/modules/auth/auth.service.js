@@ -617,26 +617,26 @@ async function resetPassword({ token, resetToken, code, resetCode, newPassword, 
   await _clearResetAttempts(tokenHash);
 
   const newHash = await bcrypt.hash(resolvedPassword, 12);
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: user.id },
-      data: {
-        passwordHash: newHash,
-        resetPasswordToken: null,
-        resetPasswordExpires: null,
-      },
-    }),
-    prisma.userSession.deleteMany({
-      where: { userId: user.id },
-    }),
-    prisma.auditLog.create({
-      data: {
-        action: 'PASSWORD_RESET_COMPLETED',
-        adminEmail: user.email || user.phoneNumber,
-        details: `Password reset successfully completed for user ${user.id}`,
-      },
-    }),
-  ]);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash: newHash,
+      resetPasswordToken: null,
+      resetPasswordExpires: null,
+    },
+  });
+
+  // Non-blocking session cleanup and audit log
+  prisma.userSession.deleteMany({ where: { userId: user.id } }).catch(() => {});
+  prisma.auditLog.create({
+    data: {
+      action: 'PASSWORD_RESET_COMPLETED',
+      adminEmail: user.email || user.phoneNumber,
+      details: `Password reset successfully completed for user ${user.id}`,
+    },
+  }).catch((err) => {
+    logger.warn(`[Auth Service] Audit log notice: ${err.message}`);
+  });
 
   return {
     message: 'Password has been reset successfully. You can now log in with your new password.',
@@ -762,29 +762,31 @@ async function verifyLoginOtp({ phoneNumber, phone, code, otp } = {}) {
   await _clearLoginFailure(canonicalPhone);
   await _clearResetAttempts(`login_otp:${canonicalPhone}`);
 
-  const [updatedUser] = await prisma.$transaction([
-    prisma.user.update({
-      where: { id: user.id },
-      data: {
-        resetPasswordToken: null,
-        resetPasswordExpires: null,
-        isPhoneVerified: true,
-        lastLoginAt: new Date(),
-      },
-      include: {
-        region: { select: { id: true, code: true, nameEn: true, nameAm: true } },
-        zone: { select: { id: true, nameEn: true, nameAm: true } },
-        woreda: { select: { id: true, nameEn: true, nameAm: true } },
-      },
-    }),
-    prisma.loginAttempt.create({
-      data: {
-        userId: user.id,
-        identifier: canonicalPhone,
-        success: true,
-      },
-    }),
-  ]);
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      resetPasswordToken: null,
+      resetPasswordExpires: null,
+      isPhoneVerified: true,
+      lastLoginAt: new Date(),
+    },
+    include: {
+      region: { select: { id: true, code: true, nameEn: true, nameAm: true } },
+      zone: { select: { id: true, nameEn: true, nameAm: true } },
+      woreda: { select: { id: true, nameEn: true, nameAm: true } },
+    },
+  });
+
+  // Non-blocking login attempt logging
+  prisma.loginAttempt.create({
+    data: {
+      userId: user.id,
+      identifier: canonicalPhone,
+      success: true,
+    },
+  }).catch((err) => {
+    logger.warn(`[Auth Service] Login attempt log notice: ${err.message}`);
+  });
 
   const accessToken = generateAccessToken(updatedUser);
   const refreshToken = generateRefreshToken(updatedUser);
@@ -823,22 +825,24 @@ async function verifyEmail(token) {
     }
   }
 
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: user.id },
-      data: {
-        isEmailVerified: true,
-        verificationToken: null,
-      },
-    }),
-    prisma.auditLog.create({
-      data: {
-        action: 'EMAIL_VERIFIED',
-        adminEmail: user.email || user.phoneNumber,
-        details: `User ${user.id} verified email address`,
-      },
-    }),
-  ]);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      isEmailVerified: true,
+      verificationToken: null,
+    },
+  });
+
+  // Non-blocking audit log
+  prisma.auditLog.create({
+    data: {
+      action: 'EMAIL_VERIFIED',
+      adminEmail: user.email || user.phoneNumber,
+      details: `User ${user.id} verified email address`,
+    },
+  }).catch((err) => {
+    logger.warn(`[Auth Service] Audit log notice: ${err.message}`);
+  });
 
   return {
     message: 'Email address verified successfully',
@@ -1050,22 +1054,22 @@ async function updatePassword(userId, currentPassword, newPassword) {
   }
 
   const newHash = await bcrypt.hash(newPassword, 12);
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash: newHash },
-    }),
-    prisma.userSession.deleteMany({
-      where: { userId },
-    }),
-    prisma.auditLog.create({
-      data: {
-        action: 'PASSWORD_UPDATED',
-        adminEmail: user.email || user.phoneNumber,
-        details: `User ${userId} updated their password`,
-      },
-    }),
-  ]);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: newHash },
+  });
+
+  // Non-blocking session termination and audit logging
+  prisma.userSession.deleteMany({ where: { userId } }).catch(() => {});
+  prisma.auditLog.create({
+    data: {
+      action: 'PASSWORD_UPDATED',
+      adminEmail: user.email || user.phoneNumber,
+      details: `User ${userId} updated their password`,
+    },
+  }).catch((err) => {
+    logger.warn(`[Auth Service] Audit log notice: ${err.message}`);
+  });
 
   return true;
 }
@@ -1153,28 +1157,30 @@ async function verifyPhoneOtp({ phoneNumber, phone, code, otp } = {}) {
   // Clear counters on successful verification
   await _clearResetAttempts(`phone_verify:${canonicalPhone}`);
 
-  const [updatedUser] = await prisma.$transaction([
-    prisma.user.update({
-      where: { id: user.id },
-      data: {
-        isPhoneVerified: true,
-        phoneVerificationToken: null,
-        phoneVerificationExpires: null,
-      },
-      include: {
-        region: true,
-        zone: true,
-        woreda: true,
-      },
-    }),
-    prisma.auditLog.create({
-      data: {
-        action: 'PHONE_VERIFIED',
-        adminEmail: user.phoneNumber || user.email,
-        details: `User ${user.id} verified phone number ${canonicalPhone}`,
-      },
-    }),
-  ]);
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      isPhoneVerified: true,
+      phoneVerificationToken: null,
+      phoneVerificationExpires: null,
+    },
+    include: {
+      region: true,
+      zone: true,
+      woreda: true,
+    },
+  });
+
+  // Non-blocking audit log
+  prisma.auditLog.create({
+    data: {
+      action: 'PHONE_VERIFIED',
+      adminEmail: user.phoneNumber || user.email,
+      details: `User ${user.id} verified phone number ${canonicalPhone}`,
+    },
+  }).catch((err) => {
+    logger.warn(`[Auth Service] Audit log notice: ${err.message}`);
+  });
 
   const accessToken = generateAccessToken(updatedUser);
   const refreshToken = generateRefreshToken(updatedUser);

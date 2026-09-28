@@ -74,7 +74,7 @@ class EarthEngineConnector {
       assertion: jwt,
     }), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 8000,
+      timeout: 25000,
     });
 
     if (res.data?.access_token) {
