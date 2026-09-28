@@ -1453,7 +1453,7 @@ async function getAgronomicAdvisories({ cropType = 'WHEAT', season = 'MEHER', wo
       titleOm: `🌧️ Rooba Waan Eegamuuf Bishaan Itti Naquu Dhaabaa`,
       actionEn: `Forecasting ${Math.round(upcomingRainMm)}mm rain over next 72h. Cease supplementary irrigation and postpone Urea application to prevent nitrate leaching.`,
       actionAm: `በሚቀጥሉት 3 ቀናት ውስጥ ${Math.round(upcomingRainMm)} ሚ.ሜ ዝናብ ስለሚጠበቅ ማዳበሪያ እንዳይታጠብ መርጨትን ያቆዩ።`,
-      actionOm: `Guyyoota sadii keessatti roobni waan dhufuuf xaa\'oo naquu yeroof dhaabaa.`,
+      actionOm: `Guyyoota sadii keessatti roobni waan dhufuuf xaa'oo naquu yeroof dhaabaa.`,
       urgency: 'MEDIUM',
       category: 'IRRIGATION',
     });
@@ -1464,7 +1464,7 @@ async function getAgronomicAdvisories({ cropType = 'WHEAT', season = 'MEHER', wo
       season: seasonName,
       titleEn: `☀️ Heat & Evaporation Stress: Mulching & Supplemental Watering for ${crop}`,
       titleAm: `☀️ ደረቅና ሞቃት አየር፡ የሳር መጎዝጎዝና ተጨማሪ ውሃ ማጠጣት ለ${crop}`,
-      titleOm: `☀️ Ho\'a fi Qorqorroo: Jiidha Biyyee Eeguu Maasii ${crop}`,
+      titleOm: `☀️ Ho'a fi Qorqorroo: Jiidha Biyyee Eeguu Maasii ${crop}`,
       actionEn: 'Dry spell forecast with high evaporation rates. Mulch furrows with crop residue and apply light evening irrigation.',
       actionAm: 'ደረቅና ሞቃት አየር ስለሚኖር አፈሩ እርጥበት እንዳያጣ በሰብሉ ዙሪያ ሳር ይጎዝጉዙ እና በማታ ሰዓት ያጠጡ።',
       actionOm: 'Biyyee irra marga gogaa uffisaa; galgala galgala bishaan xiqquma naqaa.',
@@ -1494,7 +1494,7 @@ async function getAgronomicAdvisories({ cropType = 'WHEAT', season = 'MEHER', wo
     season: seasonName,
     titleEn: `Targeted Macronutrient Optimization for ${crop}`,
     titleAm: `የተመጣጠነ ማዳበሪያ አጠቃቀም ለ${crop}`,
-    titleOm: `Waliigaltee Xaa\'oo Fayyadamuu ${crop}`,
+    titleOm: `Waliigaltee Xaa'oo Fayyadamuu ${crop}`,
     actionEn: crop === 'TEFF'
       ? 'Apply NPS at sowing and top-dress with Urea at early vegetative stage. Avoid excess nitrogen to prevent lodging.'
       : (crop === 'MAIZE'
