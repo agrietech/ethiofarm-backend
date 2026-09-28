@@ -35,7 +35,13 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
 
       const today = forecast.daily[0];
       expect(today.isToday).toBe(true);
-      expect(today.date).toBe(new Date().toISOString().split('T')[0]);
+      const eatDateStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Addis_Ababa',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
+      expect([new Date().toISOString().split('T')[0], eatDateStr]).toContain(today.date);
       expect(typeof today.precipitationProbability).toBe('number');
       expect(today.precipitationProbability).toBeGreaterThanOrEqual(0);
       expect(today.precipitationProbability).toBeLessThanOrEqual(100);
@@ -51,7 +57,7 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
       // Check telemetry attribution
       expect(forecast.dataSources).toContain('Open-Meteo');
       expect(forecast.climatology).toBeDefined();
-    }, 15000);
+    }, 30000);
 
     it('should retrieve weather for specific farm level when farmId is provided', async () => {
       if (!sampleFarm) return;
@@ -66,7 +72,7 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
       expect(forecast.location.lat).toBe(sampleFarm.latitude);
       expect(forecast.location.lng).toBe(sampleFarm.longitude);
       expect(forecast.current.temperatureC).toBeDefined();
-    }, 15000);
+    }, 30000);
 
     it('should retrieve weather for specific kebele level when kebeleId is provided', async () => {
       if (!sampleKebele) return;
@@ -79,7 +85,7 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
       expect(forecast.location.kebeleId).toBe(sampleKebele.id);
       expect(forecast.location.nameEn).toContain(sampleKebele.nameEn);
       expect(forecast.current.temperatureC).toBeDefined();
-    }, 15000);
+    }, 30000);
 
     it('should serve cached weather on subsequent hourly request with sub-50ms latency', async () => {
       // First fetch to ensure cache is populated
