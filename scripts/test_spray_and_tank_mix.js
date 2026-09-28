@@ -88,6 +88,25 @@ async function run() {
   console.log(`   First Forecast Hour (${h0.hourLabel}): ${h0.suitability} - ${h0.reasonEn}`);
   assert(h0.hourLabel && h0.suitability && h0.reasonEn, 'Forecast hour attributes complete');
 
+  // Test 1.1: Automatic Dynamic Resolution to DA's Assigned Jurisdiction (No coordinates in query)
+  console.log('\n   [Multi-Tenant Scoping] Testing Auto-Resolution to DA Assigned Kebele/Woreda:');
+  const autoScopeRes = await request(app)
+    .get('/api/v1/crop-protection/spray-window')
+    .set('Authorization', `Bearer ${daToken}`);
+
+  assert(autoScopeRes.status === 200, 'Auto-scoping returned HTTP 200 without requiring query coords');
+  assert(autoScopeRes.body.data?.location != null, 'Auto-scoped location telemetry returned');
+  console.log(`   Auto-Scoped Location: ${autoScopeRes.body.data?.location?.nameEn} (${autoScopeRes.body.data?.location?.latitude}, ${autoScopeRes.body.data?.location?.longitude})`);
+
+  // Test 1.2: Role Scope Isolation: Reject Access to Farms Outside Assigned Jurisdiction
+  console.log('\n   [Security & Role Isolation] Verifying DA Cannot Query Farms Outside Jurisdiction:');
+  const unauthorizedFarmRes = await request(app)
+    .get('/api/v1/crop-protection/spray-window')
+    .query({ farmId: 'farm_unauthorized_external_009' })
+    .set('Authorization', `Bearer ${daToken}`);
+
+  assert(unauthorizedFarmRes.status === 403, `Blocked unauthorized cross-jurisdiction farm access (got HTTP ${unauthorizedFarmRes.status})`);
+
   console.log('\n────────────────────────────────────────────────────────────────────────');
   console.log('2. TESTING CHEMICAL REGISTRY & FORMULATIONS');
   console.log('────────────────────────────────────────────────────────────────────────');

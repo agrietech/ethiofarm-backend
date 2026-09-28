@@ -3,6 +3,8 @@ const logger = require('../../utils/logger');
 const openRouterClient = require('../../utils/openRouterClient');
 const { prisma, isConnected } = require('../../config/db');
 const { getWeatherForecast } = require('../weather/weather.service');
+const { ForbiddenError } = require('../../utils/errors');
+const { buildFarmScope } = require('../../middleware/scope-filter.utils');
 
 const { ETHIOPIAN_WEED_REGISTRY, calculateKnapsackDosage } = require('./weedDatabase');
 const { evaluateEconomicThreshold } = require('./pestDatabase');
@@ -160,30 +162,68 @@ function getWeedDatabase({ cropType = null, weedType = null }) {
  * 3. Smart "Spray Window" Weather Advisory
  * Evaluates wind drift (<12 km/h), rainfastness window (2-4 hours), temperature scorch (<28°C), and humidity.
  */
-async function evaluateSprayWindow({ latitude, longitude, farmId = null }) {
+async function evaluateSprayWindow({ latitude, longitude, farmId = null, user = null }) {
   let lat = latitude;
   let lng = longitude;
+  let resolvedFarm = null;
 
   if (farmId && isConnected()) {
     try {
-      const farm = await prisma.farm.findUnique({
-        where: { id: farmId },
-        select: { latitude: true, longitude: true, name: true }
+      // Enforce strict multi-tenant role isolation:
+      // Development Agents can only access farms in their assigned Kebele/Woreda.
+      // Farmers can only access their own farms.
+      // Woreda Officers can only access farms in their Woreda.
+      const farmScope = user && user.role !== 'ADMIN'
+        ? buildFarmScope(user, { id: farmId })
+        : { id: farmId };
+
+      resolvedFarm = await prisma.farm.findFirst({
+        where: farmScope,
+        select: {
+          id: true,
+          farmName: true,
+          latitude: true,
+          longitude: true,
+          woredaId: true,
+          kebeleId: true,
+          woreda: { select: { nameEn: true, nameAm: true } },
+          kebele: { select: { nameEn: true, nameAm: true } },
+        },
       });
-      if (farm && farm.latitude && farm.longitude) {
-        lat = farm.latitude;
-        lng = farm.longitude;
+
+      if (!resolvedFarm && user && user.role !== 'ADMIN') {
+        throw new ForbiddenError('Access denied: You do not have permission to view spray advisory for this farm.');
+      }
+
+      if (resolvedFarm && resolvedFarm.latitude && resolvedFarm.longitude) {
+        lat = resolvedFarm.latitude;
+        lng = resolvedFarm.longitude;
       }
     } catch (e) {
+      if (e instanceof ForbiddenError) throw e;
       logger.warn(`[CropProtectionService] Failed to lookup farm coordinates: ${e.message}`);
     }
   }
 
-  // Fallback to central Ethiopian agricultural reference if coordinates not provided
-  lat = lat || 8.54; // Central Oromia / Adama
-  lng = lng || 39.27;
+  // Live Location Resolution:
+  // If coordinates are not explicitly passed, getWeatherForecast dynamically resolves
+  // from user's assigned Kebele, Woreda, Zone, Region, or Farm rather than hardcoding.
+  const weatherData = await getWeatherForecast({
+    farmId: resolvedFarm?.id || farmId,
+    kebeleId: user?.kebeleId,
+    woredaId: user?.woredaId,
+    zoneId: user?.zoneId,
+    regionId: user?.regionId,
+    lat,
+    lng,
+    user,
+    days: 2,
+  });
 
-  const weatherData = await getWeatherForecast({ lat, lng, days: 2 });
+  const loc = weatherData.location || {};
+  lat = lat || loc.lat || 8.54;
+  lng = lng || loc.lng || 39.27;
+
   const current = weatherData.current || {};
   const hourly = weatherData.hourly || [];
 
@@ -277,7 +317,13 @@ async function evaluateSprayWindow({ latitude, longitude, farmId = null }) {
     location: {
       latitude: lat,
       longitude: lng,
-      woreda: weatherData.location?.nameEn || 'Ethiopia Agro-Climatic Zone'
+      woreda: loc.woredaName || loc.nameEn || 'Ethiopia Agro-Climatic Zone',
+      kebele: loc.kebeleName,
+      zone: loc.zoneName,
+      region: loc.regionName,
+      level: loc.level,
+      nameEn: resolvedFarm ? resolvedFarm.farmName : (loc.nameEn || 'Assigned Extension Area'),
+      nameAm: resolvedFarm ? `${resolvedFarm.farmName} (እርሻ)` : (loc.nameAm || 'የአካባቢው እርሻ ማዕከል'),
     },
     currentConditions: {
       temperatureC: currentTemp,

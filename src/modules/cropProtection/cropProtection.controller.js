@@ -41,7 +41,8 @@ class CropProtectionController {
       const result = await service.evaluateSprayWindow({
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
-        farmId
+        farmId,
+        user: req.user,
       });
       res.status(200).json({ success: true, data: result });
     } catch (err) {
