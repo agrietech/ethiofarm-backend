@@ -175,26 +175,62 @@ function buildDiagnosisScope(user, existingWhere = {}) {
   const role = (user.role || '').toUpperCase();
   const where = { ...existingWhere };
 
+  if (existingWhere.farmId) {
+    if (role === 'FARMER') {
+      where.farm = { userId: user.id };
+    } else if (role === 'DEVELOPMENT_AGENT') {
+      if (user.kebeleId) {
+        where.farm = { kebeleId: user.kebeleId };
+      } else if (user.woredaId) {
+        where.farm = { woredaId: user.woredaId };
+      }
+    } else if (role === 'WOREDA_OFFICER') {
+      if (user.woredaId) {
+        where.farm = { woredaId: user.woredaId };
+      }
+    } else if (role === 'ZONAL_OFFICER') {
+      if (user.zoneId) {
+        where.farm = { woreda: { zoneId: user.zoneId } };
+      }
+    } else if (role === 'REGIONAL_OFFICER') {
+      if (user.regionId) {
+        where.farm = { woreda: { zone: { regionId: user.regionId } } };
+      }
+    }
+    return where;
+  }
+
+  // Broad diagnosis listing: allow farm-linked diagnoses in jurisdiction plus unassigned scans
   if (role === 'FARMER') {
-    where.farm = { userId: user.id };
+    where.OR = [
+      { farm: { userId: user.id } },
+      { farmId: null },
+    ];
   } else if (role === 'DEVELOPMENT_AGENT') {
+    const filters = [];
     if (user.kebeleId) {
-      where.farm = { kebeleId: user.kebeleId };
-    } else if (user.woredaId) {
-      where.farm = { woredaId: user.woredaId };
+      filters.push({ farm: { kebeleId: user.kebeleId } });
     }
-  } else if (role === 'WOREDA_OFFICER') {
     if (user.woredaId) {
-      where.farm = { woredaId: user.woredaId };
+      filters.push({ farm: { woredaId: user.woredaId } });
     }
+    filters.push({ farmId: null });
+    where.OR = filters;
+  } else if (role === 'WOREDA_OFFICER') {
+    where.OR = [
+      ...(user.woredaId ? [{ farm: { woredaId: user.woredaId } }] : []),
+      { farmId: null },
+    ];
   } else if (role === 'ZONAL_OFFICER') {
-    if (user.zoneId) {
-      where.farm = { woreda: { zoneId: user.zoneId } };
-    }
+    where.OR = [
+      ...(user.zoneId ? [{ farm: { woreda: { zoneId: user.zoneId } } }] : []),
+      { farmId: null },
+    ];
   } else if (role === 'REGIONAL_OFFICER') {
-    if (user.regionId) {
-      where.farm = { woreda: { zone: { regionId: user.regionId } } };
-    }
+    where.OR = [
+      ...(user.regionId ? [{ farm: { woreda: { zone: { regionId: user.regionId } } } }] : []),
+      { farmId: null },
+    ];
   }
 
   return where;
