@@ -508,6 +508,50 @@ function getSentEmailsLog() {
 }
 
 /**
+ * Dispatch a Phone Verification OTP Code via Email (Dual-Channel Delivery Fallback)
+ */
+async function sendPhoneVerificationOtpEmail(email, phone, otpCode) {
+  const subject = `🔑 Your EthioFarm Phone Verification Code: ${otpCode}`;
+  const text = `EthioFarm Smart Farming Platform\n\nPhone Verification Code\n\nHello,\n\nYour 6-digit phone verification code for ${phone} is:\n>>> ${otpCode} <<<\n\nPlease enter this code on the verification screen to activate your account.\n\nThis code is valid for 10 minutes.\n\nBest regards,\nEthioFarm Platform Team\nAddis Ababa, Ethiopia\n${env.APP_URL}`;
+
+  const contentHtml = `
+    <p style="margin-top: 0; font-size: 16px; font-weight: 600; color: #0f172a;">
+      Hello,
+    </p>
+    <p style="margin: 0 0 16px 0;">
+      Here is your phone verification code to activate your EthioFarm account for mobile number <strong style="color: #0f172a;">${phone}</strong>.
+    </p>
+
+    <!-- 6-Digit Numeric OTP Code Container -->
+    <div style="background-color: #f0fdf4; border: 2px dashed #16a34a; border-radius: 12px; padding: 22px 16px; text-align: center; margin: 24px 0;">
+      <div style="font-size: 12px; color: #15803d; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
+        Your 6-Digit Verification Code
+      </div>
+      <div style="font-size: 38px; font-weight: 900; color: #14532d; letter-spacing: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">
+        ${otpCode}
+      </div>
+      <div style="font-size: 12px; color: #64748b; margin-top: 6px;">
+        ⏱️ Valid for 10 minutes &bull; Do not share this code
+      </div>
+    </div>
+
+    <p style="margin: 0 0 16px 0; font-size: 13.5px; color: #475569;">
+      Enter this code in the mobile application to complete verification and access your command center.
+    </p>
+  `;
+
+  const html = buildEmailShell({
+    title: 'Phone Verification Code',
+    badge: '📱 Phone Verification',
+    preheader: `Your EthioFarm phone verification code is ${otpCode}. Valid for 10 minutes.`,
+    contentHtml,
+    footerAmharic: 'የስልክ ቁጥር ማረጋገጫ ኮድዎን በሞባይል መተግበሪያው ላይ በማስገባት መለያዎን ያረጋግጡ።',
+  });
+
+  return sendEmail({ to: email, subject, text, html });
+}
+
+/**
  * Clear email log (for tests)
  */
 function clearSentEmailsLog() {
@@ -518,6 +562,7 @@ module.exports = {
   sendEmail,
   sendPasswordResetEmail,
   sendVerificationEmail,
+  sendPhoneVerificationOtpEmail,
   sendEmergencyHazardAlertEmail,
   getSentEmailsLog,
   clearSentEmailsLog,
