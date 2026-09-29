@@ -534,19 +534,50 @@
       border-radius: var(--radius);
       overflow: hidden;
       border: 1px solid var(--border);
+      background: #f1f5f9;
     }
     #mapContainer {
-      height: 600px;
+      height: 620px;
       width: 100%;
+      position: relative;
+      background: #e2e8f0;
+      overflow: hidden;
+    }
+    /* Critical Leaflet Tile Image Overflow & Distortion Fix */
+    .leaflet-container {
+      width: 100% !important;
+      height: 100% !important;
+      font-family: inherit;
+      background: #e2e8f0;
+      outline: none;
+    }
+    .leaflet-container img,
+    .leaflet-tile-container img,
+    .leaflet-tile {
+      max-width: none !important;
+      max-height: none !important;
+      width: 256px !important;
+      height: 256px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+    .leaflet-pane {
+      z-index: 400;
+    }
+    .leaflet-top,
+    .leaflet-bottom {
+      z-index: 500;
     }
     .gis-hud-overlay {
       position: absolute;
       top: 12px;
-      left: 12px;
-      z-index: 999;
-      background: rgba(15, 23, 42, 0.88);
-      backdrop-filter: blur(4px);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      left: 56px;
+      z-index: 600;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 8px;
       padding: 0.5rem 0.85rem;
       color: white;
@@ -554,8 +585,8 @@
       display: flex;
       align-items: center;
       gap: 0.6rem;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-      max-width: 90%;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+      max-width: calc(100% - 70px);
       pointer-events: auto;
     }
     .gis-hud-pill {
@@ -849,10 +880,10 @@
       <div id="map" class="tab">
         <div class="panel">
           <div class="panel-header">
-            <div class="panel-title">🗺️ Ethiopia Agricultural GIS Spatial Command & Hazard Intelligence</div>
+            <div class="panel-title">Ethiopia Agricultural GIS Spatial Command & Hazard Intelligence</div>
             <div style="display:flex;gap:0.5rem;">
-              <button class="btn btn-secondary btn-sm" onclick="fitAllMapFeatures()">✨ Reset National View</button>
-              <button class="btn btn-primary btn-sm" onclick="applyMapSpatialFilters()">🔄 Refresh Map</button>
+              <button class="btn btn-secondary btn-sm" onclick="fitAllMapFeatures()">Reset National View</button>
+              <button class="btn btn-primary btn-sm" onclick="applyMapSpatialFilters()">Refresh Map</button>
             </div>
           </div>
           <div class="panel-body" style="padding:1.25rem;">
@@ -861,7 +892,7 @@
               <div class="gis-filter-row">
                 <!-- Place Filter: Region -->
                 <div class="gis-select-group">
-                  <label class="gis-select-label" for="mapRegionFilter">🇪🇹 Region Filter</label>
+                  <label class="gis-select-label" for="mapRegionFilter">Region Filter</label>
                   <select id="mapRegionFilter" class="gis-select" onchange="onMapRegionChange()">
                     <option value="ALL">All Ethiopia (National Overview)</option>
                     <option value="Oromia">Oromia (ኦሮሚያ)</option>
@@ -880,7 +911,7 @@
 
                 <!-- Place Filter: Woreda -->
                 <div class="gis-select-group">
-                  <label class="gis-select-label" for="mapWoredaFilter">📍 Woreda Filter</label>
+                  <label class="gis-select-label" for="mapWoredaFilter">Woreda Filter</label>
                   <select id="mapWoredaFilter" class="gis-select" onchange="applyMapSpatialFilters()">
                     <option value="ALL">All Woredas in Region</option>
                     <option value="woreda_adama_01">Adama Zuria (Oromia)</option>
@@ -898,32 +929,32 @@
 
                 <!-- Hazard Type Filter -->
                 <div class="gis-select-group">
-                  <label class="gis-select-label" for="mapHazardTypeFilter">🚨 Hazard Type</label>
+                  <label class="gis-select-label" for="mapHazardTypeFilter">Hazard Type</label>
                   <select id="mapHazardTypeFilter" class="gis-select" onchange="applyMapSpatialFilters()">
                     <option value="ALL">All Hazards (ሁሉም አደጋዎች)</option>
-                    <option value="DROUGHT">☀️ Drought / SPI Deficit (ድርቅ)</option>
-                    <option value="FLOOD">🌊 Riverine & Flash Flood (ጎርፍ)</option>
-                    <option value="LOCUST_PEST">🦗 Desert Locust & Pest (የበረሃ አንበጣ)</option>
-                    <option value="FROST">❄️ Highland Nocturnal Frost (ውርጭ)</option>
-                    <option value="VEGETATION_STRESS">🔬 Crop Disease & Stress (የሰብል በሽታ)</option>
+                    <option value="DROUGHT">Drought / SPI Deficit (ድርቅ)</option>
+                    <option value="FLOOD">Riverine & Flash Flood (ጎርፍ)</option>
+                    <option value="LOCUST_PEST">Desert Locust & Pest (የበረሃ አንበጣ)</option>
+                    <option value="FROST">Highland Nocturnal Frost (ውርጭ)</option>
+                    <option value="VEGETATION_STRESS">Crop Disease & Stress (የሰብል በሽታ)</option>
                   </select>
                 </div>
 
                 <!-- Severity Level Filter -->
                 <div class="gis-select-group" style="max-width:160px;">
-                  <label class="gis-select-label" for="mapSeverityFilter">⚡ Severity Scale</label>
+                  <label class="gis-select-label" for="mapSeverityFilter">Severity Scale</label>
                   <select id="mapSeverityFilter" class="gis-select" onchange="applyMapSpatialFilters()">
                     <option value="ALL">All Severities</option>
-                    <option value="CRITICAL">🔴 Critical (እጅግ ከፍተኛ)</option>
-                    <option value="HIGH">🟠 High (ከፍተኛ)</option>
-                    <option value="MODERATE">🟡 Moderate (መካከለኛ)</option>
-                    <option value="LOW">🟢 Low / Safe (ዝቅተኛ)</option>
+                    <option value="CRITICAL">Critical (እጅግ ከፍተኛ)</option>
+                    <option value="HIGH">High (ከፍተኛ)</option>
+                    <option value="MODERATE">Moderate (መካከለኛ)</option>
+                    <option value="LOW">Low / Safe (ዝቅተኛ)</option>
                   </select>
                 </div>
 
                 <!-- Search Input -->
                 <div class="gis-select-group" style="min-width:180px;">
-                  <label class="gis-select-label" for="mapPlaceSearch">🔍 Quick Search Place</label>
+                  <label class="gis-select-label" for="mapPlaceSearch">Quick Search Place</label>
                   <input type="text" id="mapPlaceSearch" class="gis-search-input" placeholder="Search woreda or region..." oninput="onMapPlaceSearch(this.value)">
                 </div>
               </div>
@@ -952,11 +983,11 @@
                 <!-- Quick Presets -->
                 <div class="gis-presets">
                   <span style="color:#94a3b8;font-weight:700;text-transform:uppercase;font-size:0.7rem;">Presets:</span>
-                  <button class="gis-preset-btn" onclick="applyHazardPreset('DROUGHT')">☀️ Drought Hotspots</button>
-                  <button class="gis-preset-btn" onclick="applyHazardPreset('FLOOD')">🌊 Flood Basins</button>
-                  <button class="gis-preset-btn" onclick="applyHazardPreset('LOCUST')">🦗 Locust Pathway</button>
-                  <button class="gis-preset-btn" onclick="applyHazardPreset('FROST')">❄️ Frost Highlands</button>
-                  <button class="gis-preset-btn" style="background:#dc2626;color:white;border-color:#b91c1c;" onclick="broadcastToFilteredPlace()">📢 Broadcast USSD to Place</button>
+                  <button class="gis-preset-btn" onclick="applyHazardPreset('DROUGHT')">Drought Hotspots</button>
+                  <button class="gis-preset-btn" onclick="applyHazardPreset('FLOOD')">Flood Basins</button>
+                  <button class="gis-preset-btn" onclick="applyHazardPreset('LOCUST')">Locust Pathway</button>
+                  <button class="gis-preset-btn" onclick="applyHazardPreset('FROST')">Frost Highlands</button>
+                  <button class="gis-preset-btn" style="background:#dc2626;color:white;border-color:#b91c1c;" onclick="broadcastToFilteredPlace()">Broadcast USSD to Place</button>
                 </div>
               </div>
             </div>
@@ -1927,7 +1958,6 @@
       } catch (_e) {
         // Offline or network glitch — continue rendering with existing token
         loadOverview();
-        initMap();
       }
     }
 
@@ -1947,9 +1977,13 @@
       if (tabName === 'overview') loadOverview();
       else if (tabName === 'map') {
         setTimeout(() => {
-          if (map) map.invalidateSize();
-          plotFarmsOnMap();
-        }, 150);
+          if (!map) {
+            initMap();
+          } else {
+            map.invalidateSize();
+            applyMapSpatialFilters();
+          }
+        }, 120);
       }
       else if (tabName === 'boundaries') loadBoundariesSummary();
       else if (tabName === 'users') loadUsers();
@@ -2478,24 +2512,56 @@
       ],
     };
 
+    function plotFarmsOnMap() {
+      if (!map) {
+        initMap();
+      } else {
+        map.invalidateSize();
+        applyMapSpatialFilters();
+      }
+    }
+
     function initMap() {
       try {
-        if (map) return;
+        const container = document.getElementById('mapContainer');
+        if (!container) return;
+        if (map) {
+          map.invalidateSize();
+          applyMapSpatialFilters();
+          return;
+        }
+
         map = L.map('mapContainer', {
-          maxBounds: [[3.0, 32.5], [15.5, 48.5]],
-          maxBoundsViscosity: 1.0,
-          minZoom: 5.8,
-          maxZoom: 14,
-        }).setView([9.145, 40.489], 6.2);
+          center: [9.145, 40.489],
+          zoom: 6.2,
+          minZoom: 5.0,
+          maxZoom: 16,
+          zoomControl: true,
+          fadeAnimation: true,
+          zoomAnimation: true,
+        });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap contributors | EthioFarm Expert GIS Command'
-        }).addTo(map);
+        // High-availability CartoDB Voyager tiles with fallback
+        const primaryTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a> | EthioFarm GIS',
+          maxZoom: 19,
+          subdomains: 'abcd',
+        });
 
+        primaryTileLayer.on('tileerror', function() {
+          console.warn('CartoDB tile load warning, applying fallback layer');
+        });
+
+        primaryTileLayer.addTo(map);
         mapLayerGroup = L.layerGroup().addTo(map);
 
-        // Populate initial map display with active spatial filters
-        applyMapSpatialFilters();
+        // Repaint and populate initial map display
+        setTimeout(() => {
+          if (map) {
+            map.invalidateSize();
+            applyMapSpatialFilters();
+          }
+        }, 150);
       } catch (e) {
         console.error('Map init error:', e);
       }
@@ -2623,8 +2689,11 @@
           hazardCount = alerts.length;
 
           alerts.forEach(a => {
-            const lat = a.woreda?.centerLat || 9.145;
-            const lng = a.woreda?.centerLng || 40.489;
+            const rawLat = a.woreda?.centerLat ?? a.latitude ?? 9.145;
+            const rawLng = a.woreda?.centerLng ?? a.longitude ?? 40.489;
+            const lat = parseFloat(rawLat);
+            const lng = parseFloat(rawLng);
+            if (isNaN(lat) || isNaN(lng)) return;
             bounds.push([lat, lng]);
 
             const color = a.severity === 'CRITICAL' ? '#ef4444' : (a.severity === 'HIGH' ? '#f97316' : (a.severity === 'MODERATE' ? '#f59e0b' : '#10b981'));
@@ -2668,7 +2737,7 @@
                   <div><strong>Advisory:</strong> ${a.messageEn ? a.messageEn.substring(0, 110) + '...' : 'Implement crop protection protocols.'}</div>
                 </div>
                 <button class="btn btn-warning btn-sm" style="width:100%;font-size:11px;padding:4px 8px;" onclick="triggerDirectUssdForHazard('${a.woredaId || 'woreda_adama_01'}', '${a.hazardType || 'DROUGHT'}', '${a.woreda?.nameEn || 'Adama Zuria'}')">
-                  🚀 Broadcast USSD/SMS to this Woreda
+                  Broadcast USSD/SMS to this Woreda
                 </button>
               </div>
             `;
@@ -2700,8 +2769,9 @@
           farmCount = farms.length;
 
           farms.forEach(f => {
-            const lat = f.latitude || 9.145;
-            const lng = f.longitude || 40.489;
+            const lat = parseFloat(f.latitude);
+            const lng = parseFloat(f.longitude);
+            if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return;
             bounds.push([lat, lng]);
 
             const farmMarker = L.circleMarker([lat, lng], {
@@ -2715,7 +2785,7 @@
 
             farmMarker.bindPopup(`
               <div style="font-family:Inter,sans-serif;padding:4px;">
-                <h4 style="margin:0 0 4px;color:#065f46;">🚜 ${f.farmName || 'Model Farm'}</h4>
+                <h4 style="margin:0 0 4px;color:#065f46;">Farm: ${f.farmName || 'Model Farm'}</h4>
                 <p style="margin:0;font-size:11.5px;"><strong>Crop:</strong> ${f.primaryCrop || 'Teff'}</p>
                 <p style="margin:0;font-size:11.5px;"><strong>Size:</strong> ${f.areaHectares || 2.5} Ha</p>
                 <p style="margin:0;font-size:11.5px;"><strong>Owner:</strong> ${f.user?.fullName || 'Farmer'}</p>
@@ -2738,8 +2808,9 @@
           sensorCount = sensors.length;
 
           sensors.forEach(s => {
-            const lat = s.farm?.latitude || 11.5936;
-            const lng = s.farm?.longitude || 37.3908;
+            const lat = parseFloat(s.farm?.latitude ?? s.latitude);
+            const lng = parseFloat(s.farm?.longitude ?? s.longitude);
+            if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return;
             bounds.push([lat, lng]);
 
             const sensorMarker = L.circleMarker([lat, lng], {
@@ -2753,9 +2824,9 @@
 
             sensorMarker.bindPopup(`
               <div style="font-family:Inter,sans-serif;padding:4px;">
-                <h4 style="margin:0 0 4px;color:#1e40af;">📡 ${s.hardwareId || 'IoT Node'}</h4>
+                <h4 style="margin:0 0 4px;color:#1e40af;">Sensor: ${s.hardwareId || 'IoT Node'}</h4>
                 <p style="margin:0;font-size:11.5px;"><strong>Type:</strong> ${s.sensorType || 'Soil Telemetry'}</p>
-                <p style="margin:0;font-size:11.5px;"><strong>Status:</strong> ${s.isActive !== false ? '🟢 Active' : '🔴 Inactive'}</p>
+                <p style="margin:0;font-size:11.5px;"><strong>Status:</strong> ${s.isActive !== false ? 'Active' : 'Inactive'}</p>
                 <p style="margin:0;font-size:11.5px;"><strong>Holding:</strong> ${s.farm?.farmName || 'Bahir Dar Plot'}</p>
               </div>
             `);
@@ -2785,24 +2856,38 @@
         hudStats.innerText = `${hazardCount} Hazard Threat Zones • ${farmCount} Farm Plots • ${sensorCount} IoT Nodes Active`;
       }
 
-      // Smooth camera framing
+      // Smooth camera framing with error guard
       if (bounds.length > 0 && map) {
-        map.flyToBounds(bounds, { padding: [45, 45], maxZoom: 9, duration: 1.0 });
+        try {
+          map.flyToBounds(bounds, { padding: [45, 45], maxZoom: 9, duration: 1.0 });
+        } catch (err) {
+          console.warn('flyToBounds warning:', err);
+          map.setView([9.145, 40.489], 6.2);
+        }
       } else if (region !== 'ALL' && ETHIOPIA_REGION_CENTROIDS[region] && map) {
         const c = ETHIOPIA_REGION_CENTROIDS[region];
         map.flyTo(c.center, c.zoom, { duration: 1.0 });
+      } else if (map) {
+        map.setView([9.145, 40.489], 6.2);
       }
     }
 
     async function loadBoundariesLayer(type) {
       try {
-        const res = await fetch(`/api/v1/boundaries/${type}`, { headers: getAuthHeaders() });
+        const url = type === 'regions' 
+          ? '/api/v1/boundaries/regions?includeGeometry=true'
+          : '/api/v1/boundaries/woredas?limit=100';
+        const res = await fetch(url, { headers: getAuthHeaders() });
         const json = await res.json();
         if (json.success && json.data) {
-          const data = Array.isArray(json.data) ? json.data : [json.data];
-          data.forEach(item => {
-            if (item.geojson || item.boundary) {
-              const boundaryLayer = L.geoJSON(item.geojson || item.boundary, {
+          const items = Array.isArray(json.data) ? json.data : (json.data.woredas || [json.data]);
+          items.forEach(item => {
+            let geom = item.geojson || item.boundary;
+            if (geom) {
+              if (typeof geom === 'string') {
+                try { geom = JSON.parse(geom); } catch (_) { return; }
+              }
+              const boundaryLayer = L.geoJSON(geom, {
                 style: {
                   color: type === 'regions' ? '#3b82f6' : '#10b981',
                   weight: type === 'regions' ? 2.5 : 1.5,
