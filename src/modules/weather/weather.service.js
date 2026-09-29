@@ -103,13 +103,15 @@ function resolveWeatherDetails(code) {
  * High-Precision Location Resolver:
  * Supports Farm, Kebele, GPS Coordinates, Woreda, Zone, Region, or User-Assigned Scopes.
  */
-async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regionId, lat, lng, user = {} } = {}) {
+async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regionId, lat, lng, user } = {}) {
+  const safeUser = user || {};
+
   // 1. Farm Level (Hyper-local precision down to farm plot boundaries)
-  let targetFarmId = farmId || (user.role === 'FARMER' ? (user.farmId || user.primaryFarmId) : null);
-  if (!targetFarmId && user.role === 'FARMER' && user.id) {
+  let targetFarmId = farmId || (safeUser.role === 'FARMER' ? (safeUser.farmId || safeUser.primaryFarmId) : null);
+  if (!targetFarmId && safeUser.role === 'FARMER' && safeUser.id) {
     try {
       const uFarm = await prisma.farm.findFirst({
-        where: { userId: user.id },
+        where: { userId: safeUser.id },
         select: { id: true },
         orderBy: { createdAt: 'desc' },
       });
@@ -184,7 +186,7 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
       nameAm: 'የአካባቢው እርሻ',
       lat: 8.54,
       lng: 39.27,
-      woredaId: user.woredaId || 'ET040101',
+      woredaId: safeUser.woredaId || 'ET040101',
       woredaName: 'Adama Zuria',
       elevationMeters: 1920,
       agroZone: 'WEINA_DEGA',
@@ -192,7 +194,7 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
   }
 
   // 2. Kebele Level (Sub-district administrative level for Development Agents)
-  const targetKebeleId = kebeleId || (user.role === 'DEVELOPMENT_AGENT' ? user.kebeleId : null);
+  const targetKebeleId = kebeleId || (safeUser.role === 'DEVELOPMENT_AGENT' ? safeUser.kebeleId : null);
   if (targetKebeleId) {
     try {
       const kebele = await prisma.kebele.findUnique({
@@ -241,7 +243,7 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
       level: 'KEBELE',
       id: targetKebeleId,
       kebeleId: targetKebeleId,
-      nameEn: user.kebeleName ? `${user.kebeleName} Kebele` : 'Kebele Extension Area',
+      nameEn: safeUser.kebeleName ? `${safeUser.kebeleName} Kebele` : 'Kebele Extension Area',
       nameAm: 'ቀበሌ እርሻ ማዕከል',
       lat: 8.54,
       lng: 39.27,
@@ -274,7 +276,7 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
   }
 
   // 4. Woreda Level (Woreda Officers & Woreda-scoped users)
-  const targetWoredaId = woredaId || (user.role === 'WOREDA_OFFICER' ? user.woredaId : null) || user.woredaId;
+  const targetWoredaId = woredaId || (safeUser.role === 'WOREDA_OFFICER' ? safeUser.woredaId : null) || safeUser.woredaId;
   if (targetWoredaId) {
     try {
       const w = await getWoredaCoordinates(targetWoredaId);
@@ -293,7 +295,7 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
   }
 
   // 5. Zone Level (Zonal Officers & Zonal Scope)
-  const targetZoneId = zoneId || (user.role === 'ZONAL_OFFICER' ? user.zoneId : null) || user.zoneId;
+  const targetZoneId = zoneId || (safeUser.role === 'ZONAL_OFFICER' ? safeUser.zoneId : null) || safeUser.zoneId;
   if (targetZoneId) {
     try {
       const z = await getZoneCoordinates(targetZoneId);
@@ -315,7 +317,7 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
   }
 
   // 6. Region Level (Regional Officers & Regional Scope)
-  const targetRegionId = regionId || (user.role === 'REGIONAL_OFFICER' ? user.regionId : null) || user.regionId;
+  const targetRegionId = regionId || (safeUser.role === 'REGIONAL_OFFICER' ? safeUser.regionId : null) || safeUser.regionId;
   if (targetRegionId) {
     try {
       const r = await getRegionCoordinates(targetRegionId);

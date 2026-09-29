@@ -216,7 +216,7 @@ async function evaluateSprayWindow({ latitude, longitude, farmId = null, user = 
     regionId: user?.regionId,
     lat,
     lng,
-    user,
+    user: user || {},
     days: 2,
   });
 
