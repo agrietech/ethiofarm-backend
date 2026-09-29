@@ -170,12 +170,27 @@ async function diagnoseCropImage({ farmId, cropType, imageUrl, imageFile, imageB
     },
   };
 
-  const upperCrop = String(cropType || '').toUpperCase();
-  const matchedTaxonomy = ETHIOPIA_PATHOLOGY_TAXONOMY[upperCrop] || null;
+  const cropTypeKey = (cropType || '').toUpperCase().trim();
+  const matchedTaxonomy = ETHIOPIA_PATHOLOGY_TAXONOMY[cropTypeKey] || null;
+
+  // Strict Detection Engine: Strictly analyze real vision outputs without substituting mock data
+  const isHealthyDetected = Boolean(
+    (plantIdResult.isHealthy === true || plantIdResult.isHealthy?.binary) &&
+    (!plantNetResult.topDisease || (plantNetResult.topDisease.score && plantNetResult.topDisease.score < 0.35)) &&
+    (!diagnosis.diseaseName || String(diagnosis.diseaseName?.nameEn || diagnosis.diseaseName || '').toLowerCase().includes('healthy'))
+  );
+
+  const rawDetectedDiseaseEn = (typeof diagnosis.diseaseName === 'string' ? diagnosis.diseaseName : (diagnosis.diseaseName?.nameEn || diagnosis.diseaseName?.en))
+    || plantNetResult.topDisease?.name
+    || plantIdResult.diseases?.[0]?.name
+    || null;
+
+  const rawDetectedDiseaseAm = (typeof diagnosis.diseaseName === 'object' && (diagnosis.diseaseName?.nameAm || diagnosis.diseaseName?.am))
+    || null;
 
   const resolvedCropEn = (typeof diagnosis.cropIdentified === 'string' ? diagnosis.cropIdentified : (diagnosis.cropIdentified?.nameEn || diagnosis.cropIdentified?.en))
-    || (matchedTaxonomy && matchedTaxonomy.cropEn)
     || plantIdResult.crop?.scientificName
+    || (matchedTaxonomy && matchedTaxonomy.cropEn)
     || cropType
     || 'Crop (Botanical specimen)';
 
@@ -185,32 +200,37 @@ async function diagnoseCropImage({ farmId, cropType, imageUrl, imageFile, imageB
 
   const resolvedCropOm = (matchedTaxonomy && matchedTaxonomy.cropOm) || 'Midhaan Qonnaa';
 
-  const resolvedDiseaseEn = (typeof diagnosis.diseaseName === 'string' ? diagnosis.diseaseName : (diagnosis.diseaseName?.nameEn || diagnosis.diseaseName?.en))
-    || plantNetResult.topDisease?.name
-    || plantIdResult.diseases?.[0]?.name
-    || (matchedTaxonomy && matchedTaxonomy.diseaseEn)
-    || 'Botanical Condition Analysis';
+  let resolvedDiseaseEn;
+  let resolvedDiseaseAm;
+  let resolvedDiseaseOm;
+  let resolvedPathogen;
+  let resolvedSeverity;
+  let resolvedConfidence;
 
-  const resolvedDiseaseAm = (typeof diagnosis.diseaseName === 'object' && (diagnosis.diseaseName?.nameAm || diagnosis.diseaseName?.am))
-    || (matchedTaxonomy && matchedTaxonomy.diseaseAm)
-    || 'የሰብል በሽታ ምርመራ';
-
-  const resolvedDiseaseOm = (matchedTaxonomy && matchedTaxonomy.diseaseOm) || 'Qorannoo Dhibee Midhaanii';
-
-  const resolvedPathogen = diagnosis.pathogen
-    || plantNetResult.topDisease?.eppoCode
-    || plantIdResult.diseases?.[0]?.cause
-    || (matchedTaxonomy && matchedTaxonomy.pathogen)
-    || 'Fungal/Viral/Pest Pathogen';
-
-  const resolvedSeverity = diagnosis.severity || (plantNetResult.topDisease?.score > 0.6 ? 'HIGH' : 'MODERATE');
-
-  let resolvedConfidence = (typeof diagnosis.confidenceScore === 'number' && diagnosis.confidenceScore > 0)
-    ? diagnosis.confidenceScore
-    : (plantNetResult.topDisease?.score || plantIdResult.diseases?.[0]?.probability || 0.88);
-
-  if (resolvedConfidence <= 0.1 && matchedTaxonomy) {
-    resolvedConfidence = 0.88;
+  if (isHealthyDetected) {
+    resolvedDiseaseEn = 'Healthy Plant / No Active Pathogen Detected';
+    resolvedDiseaseAm = 'ጤናማ ተክል / ምንም አይነት የበሽታ ምልክት አልተገኘም';
+    resolvedDiseaseOm = 'Midhaan fayyaadha / Dhibeen hin jiru';
+    resolvedPathogen = 'None (Healthy specimen)';
+    resolvedSeverity = 'LOW';
+    resolvedConfidence = Math.round((plantIdResult.isHealthyProbability || 0.94) * 100) / 100;
+  } else if (rawDetectedDiseaseEn) {
+    resolvedDiseaseEn = rawDetectedDiseaseEn;
+    resolvedDiseaseAm = rawDetectedDiseaseAm || `የተገኘ የሰብል በሽታ (${rawDetectedDiseaseEn})`;
+    resolvedDiseaseOm = `Qorannoo dhibee (${rawDetectedDiseaseEn})`;
+    resolvedPathogen = diagnosis.pathogen || plantNetResult.topDisease?.eppoCode || plantIdResult.diseases?.[0]?.cause || 'Foliar Pathogen';
+    resolvedSeverity = diagnosis.severity || ((plantNetResult.topDisease?.score || 0) > 0.6 ? 'HIGH' : 'MODERATE');
+    resolvedConfidence = Math.round(((typeof diagnosis.confidenceScore === 'number' && diagnosis.confidenceScore > 0)
+      ? diagnosis.confidenceScore
+      : (plantNetResult.topDisease?.score || plantIdResult.diseases?.[0]?.probability || 0.78)) * 100) / 100;
+  } else {
+    // Inconclusive detection: neither disease nor healthy confident match
+    resolvedDiseaseEn = 'Inconclusive / Low Visibility Specimen';
+    resolvedDiseaseAm = 'ያልተረጋገጠ / በቂ የምስል መረጃ የለም';
+    resolvedDiseaseOm = 'Ragaan dhibee hin mirkanoofne';
+    resolvedPathogen = 'Undetermined';
+    resolvedSeverity = 'LOW';
+    resolvedConfidence = Math.round((diagnosis.confidenceScore || plantIdResult.crop?.probability || 0.35) * 100) / 100;
   }
 
   // Extract authoritative solution protocols from Perenual if available
@@ -220,32 +240,64 @@ async function diagnoseCropImage({ farmId, cropType, imageUrl, imageFile, imageB
         : String(perenualResult.topResult.solutions[0]))
     : null;
 
-  // Triaging: Flag low confidence scans for local Woreda Development Agent review
-  const needsExpertReview = resolvedConfidence < 0.75;
+  // Triaging: Flag low confidence or inconclusive scans for local Woreda Development Agent review
+  const needsExpertReview = resolvedConfidence < 0.75 || !rawDetectedDiseaseEn;
   const triageStatus = needsExpertReview ? 'PENDING_DA_REVIEW' : 'AI_VERIFIED';
 
-  const chemEn = diagnosis.treatment?.chemicalEn || (typeof diagnosis.chemicalTreatment === 'object' ? diagnosis.chemicalTreatment?.en : diagnosis.chemicalTreatment);
-  const chemAm = diagnosis.treatment?.chemicalAm || (typeof diagnosis.chemicalTreatment === 'object' ? diagnosis.chemicalTreatment?.am : null);
-  const orgEn = diagnosis.treatment?.organicEn || (typeof diagnosis.organicTreatment === 'object' ? diagnosis.organicTreatment?.en : diagnosis.organicTreatment);
-  const orgAm = diagnosis.treatment?.organicAm || (typeof diagnosis.organicTreatment === 'object' ? diagnosis.organicTreatment?.am : null);
+  let treatmentEn;
+  let treatmentAm;
+  let treatmentOm;
+  let symptomsEn;
+  let symptomsAm;
+  let preventionEn;
+  let preventionAm;
 
-  const treatmentEn = [
-    chemEn ? `Chemical: ${chemEn}` : (matchedTaxonomy ? matchedTaxonomy.treatmentEn : null),
-    orgEn ? `Organic/Cultural: ${orgEn}` : null,
-    perenualSolutionText ? `Perenual Protocol: ${perenualSolutionText}` : null,
-  ].filter(Boolean).join(' | ') || 'Apply targeted agronomic treatment and remove diseased foliage.';
+  if (isHealthyDetected) {
+    treatmentEn = 'No chemical treatment required. Maintain standard irrigation and nutrition schedule.';
+    treatmentAm = 'ምንም አይነት ኬሚካል አያስፈልግም። መደበኛ የመስኖና የአፈር እንክብካቤን ይቀጥሉ።';
+    treatmentOm = 'Qorichi hin barbaachisu. Eegumsa biyyee fi bishaanii itti fufaa.';
+    symptomsEn = 'Foliage and plant tissues display normal green vigor, uniform pigmentation, and no necrotic lesions.';
+    symptomsAm = 'የተክሉ ቅጠሎችና ቅርንጫፎች ጤናማ እድገትና ንጹህ አረንጓዴ ቀለም ያሳያሉ፤ የበሽታ መበስበስ ምልክት የለም።';
+    preventionEn = 'Continue weekly field scouting and maintain weed-free plot borders.';
+    preventionAm = 'ሳምንታዊ የእርሻ ክትትልዎን ይቀጥሉ፤ የእርሻውን ድንበር ከአረም ያጽዱ።';
+  } else if (rawDetectedDiseaseEn) {
+    // Only use matchedTaxonomy if the DETECTED disease actually matches the taxonomy
+    const isTaxonomyMatch = matchedTaxonomy && (
+      resolvedDiseaseEn.toLowerCase().includes(matchedTaxonomy.diseaseEn.split(' ')[0].toLowerCase()) ||
+      (matchedTaxonomy.pathogen && resolvedPathogen.toLowerCase().includes(matchedTaxonomy.pathogen.split(' ')[0].toLowerCase()))
+    );
 
-  const treatmentAm = [
-    chemAm ? `ኬሚካል፡ ${chemAm}` : (matchedTaxonomy ? matchedTaxonomy.treatmentAm : null),
-    orgAm ? `የተፈጥሮ ዘዴ፡ ${orgAm}` : null,
-  ].filter(Boolean).join(' | ') || 'ተገቢውን ፀረ-ተባይ/ፈንገስ ይርጩ፤ የተጎዱ የዕፅዋት ቅሪቶችን ያስወግዱ።';
+    const chemEn = diagnosis.treatment?.chemicalEn || (typeof diagnosis.chemicalTreatment === 'object' ? diagnosis.chemicalTreatment?.en : diagnosis.chemicalTreatment);
+    const chemAm = diagnosis.treatment?.chemicalAm || (typeof diagnosis.chemicalTreatment === 'object' ? diagnosis.chemicalTreatment?.am : null);
+    const orgEn = diagnosis.treatment?.organicEn || (typeof diagnosis.organicTreatment === 'object' ? diagnosis.organicTreatment?.en : diagnosis.organicTreatment);
+    const orgAm = diagnosis.treatment?.organicAm || (typeof diagnosis.organicTreatment === 'object' ? diagnosis.organicTreatment?.am : null);
 
-  const treatmentOm = diagnosis.treatment?.culturalOm || (matchedTaxonomy ? matchedTaxonomy.treatmentOm : 'Dawaa qoricha dhibee itti gorfame seeraan fayyadamaa.');
+    treatmentEn = [
+      chemEn ? `Chemical: ${chemEn}` : (isTaxonomyMatch ? matchedTaxonomy.treatmentEn : null),
+      orgEn ? `Organic/Cultural: ${orgEn}` : null,
+      perenualSolutionText ? `Perenual Protocol: ${perenualSolutionText}` : null,
+    ].filter(Boolean).join(' | ') || plantIdResult.diseases?.[0]?.treatment?.chemical?.[0] || 'Apply targeted foliar treatment suited for detected condition.';
 
-  const symptomsEn = (typeof diagnosis.symptoms === 'object' ? diagnosis.symptoms?.en : diagnosis.symptoms) || (matchedTaxonomy ? matchedTaxonomy.symptomsEn : 'Visible foliage discoloration and leaf tissue lesions.');
-  const symptomsAm = (typeof diagnosis.symptoms === 'object' ? diagnosis.symptoms?.am : null) || (matchedTaxonomy ? matchedTaxonomy.symptomsAm : 'በቅጠሎችና በግንዱ ላይ የበሽታ ምልክቶችና የሕብረ-ቀለም ለውጥ ይታያል።');
-  const preventionEn = (typeof diagnosis.prevention === 'object' ? diagnosis.prevention?.en : diagnosis.prevention) || (matchedTaxonomy ? matchedTaxonomy.preventionEn : 'Use certified clean seeds, implement crop rotation, and inspect weekly.');
-  const preventionAm = (typeof diagnosis.prevention === 'object' ? diagnosis.prevention?.am : null) || (matchedTaxonomy ? matchedTaxonomy.preventionAm : 'የተሻሻሉ የበሽታ ተከላካይ ዘሮችን ይጠቀሙ፤ የሰብል ፈረቃን ይተግብሩ።');
+    treatmentAm = [
+      chemAm ? `ኬሚካል፡ ${chemAm}` : (isTaxonomyMatch ? matchedTaxonomy.treatmentAm : null),
+      orgAm ? `የተፈጥሮ ዘዴ፡ ${orgAm}` : null,
+    ].filter(Boolean).join(' | ') || 'የተጎዱ ቅጠሎችን ያስወግዱ፤ ለተለየው የበሽታ አይነት ተስማሚ የሆነ ፀረ-ፈንገስ/ተባይ ይርጩ።';
+
+    treatmentOm = diagnosis.treatment?.culturalOm || (isTaxonomyMatch ? matchedTaxonomy.treatmentOm : 'Dawaa qoricha dhibee itti gorfame seeraan fayyadamaa.');
+    symptomsEn = (typeof diagnosis.symptoms === 'object' ? diagnosis.symptoms?.en : diagnosis.symptoms) || (isTaxonomyMatch ? matchedTaxonomy.symptomsEn : plantIdResult.diseases?.[0]?.description || 'Visible leaf discoloration and stress lesions.');
+    symptomsAm = (typeof diagnosis.symptoms === 'object' ? diagnosis.symptoms?.am : null) || (isTaxonomyMatch ? matchedTaxonomy.symptomsAm : 'በቅጠሎችና በግንዱ ላይ የበሽታ ምልክቶችና የሕብረ-ቀለም ለውጥ ይታያል።');
+    preventionEn = (typeof diagnosis.prevention === 'object' ? diagnosis.prevention?.en : diagnosis.prevention) || (isTaxonomyMatch ? matchedTaxonomy.preventionEn : 'Use certified clean seeds, implement crop rotation, and inspect weekly.');
+    preventionAm = (typeof diagnosis.prevention === 'object' ? diagnosis.prevention?.am : null) || (isTaxonomyMatch ? matchedTaxonomy.preventionAm : 'የተሻሻሉ የበሽታ ተከላካይ ዘሮችን ይጠቀሙ፤ የሰብል ፈረቃን ይተግብሩ።');
+  } else {
+    // Inconclusive
+    treatmentEn = 'Capture a clearer, well-focused close-up photograph of the leaf in daylight, or consult a local Development Agent (DA).';
+    treatmentAm = 'እባክዎ በቂ ብርሃን ባለበት ቦታ የቅጠሉን ገጽታ በቅርበት በድጋሚ ፎቶ ያንሱ፤ ወይም በአቅራቢያዎ የሚገኝ የልማት ጣቢያ ባለሙያ ያማክሩ።';
+    treatmentOm = 'Suuraa baala ifa ga\'aa keessatti irra deebi\'aa kaasaa, ykn ogeessa qonnaa mariisisaa.';
+    symptomsEn = 'The AI diagnostic engine could not verify a specific pathogen pattern from this image.';
+    symptomsAm = 'የምስል ጥራት ወይም የእይታ ማዕዘን በቂ ባለመሆኑ የተለየ የበሽታ አይነት ማረጋገጥ አልተቻለም።';
+    preventionEn = 'Regularly inspect field for any emerging yellowing, spotting, or leaf wilting.';
+    preventionAm = 'በእርሻዎ ላይ ያልተለመደ የቅጠል መገርጣት ወይም ነጠብጣብ መኖሩን በየጊዜው ይፈትሹ።';
+  }
 
   const rawResponse = {
     gemini: diagnosis,
