@@ -3,6 +3,7 @@ const { prisma, isConnected } = require('../../config/db');
 const redis = require('../../config/redis');
 const { getQueueStats, addJob } = require('../../ingestion/jobs/queue');
 const boundariesService = require('../boundaries/boundaries.service');
+const { validateFarmPolygon, generateBoundingPolygon } = require('../farms/farmGeometry');
 const { BadRequestError } = require('../../utils/errors');
 const logger = require('../../utils/logger');
 const os = require('os');
@@ -795,12 +796,42 @@ async function createFarm(data, adminContext = {}) {
   }
 
   let woredaId = data.woredaId;
+  let kebeleId = data.kebeleId || null;
+
+  if (kebeleId) {
+    try {
+      const kebele = await prisma.kebele.findUnique({ where: { id: kebeleId } });
+      if (kebele) {
+        if (!woredaId && kebele.woredaId) woredaId = kebele.woredaId;
+      } else {
+        kebeleId = null;
+      }
+    } catch (_) {
+      kebeleId = null;
+    }
+  }
+
   if (!woredaId && data.latitude && data.longitude) {
     woredaId = await boundariesService.resolveWoredaByCoords(parseFloat(data.latitude), parseFloat(data.longitude));
+  }
+  if (!kebeleId && data.latitude && data.longitude) {
+    kebeleId = await boundariesService.resolveKebeleByCoords(parseFloat(data.latitude), parseFloat(data.longitude));
   }
   if (!woredaId) {
     const firstWoreda = await prisma.woreda.findFirst({ select: { id: true } });
     woredaId = firstWoreda ? firstWoreda.id : 'ET040101';
+  }
+
+  let polygonGeojson = data.polygonGeojson || null;
+  if (polygonGeojson) {
+    try {
+      const validated = validateFarmPolygon(polygonGeojson);
+      polygonGeojson = validated.geometry;
+    } catch (_) {
+      // If already a valid geometry object, keep it
+    }
+  } else if (data.latitude && data.longitude) {
+    polygonGeojson = generateBoundingPolygon(parseFloat(data.latitude), parseFloat(data.longitude), parseFloat(data.areaHectares || 1.0));
   }
 
   const created = await prisma.farm.create({
@@ -808,11 +839,18 @@ async function createFarm(data, adminContext = {}) {
       farmName: data.farmName || 'Unnamed Farm Plot',
       userId,
       woredaId,
+      kebeleId,
       areaHectares: parseFloat(data.areaHectares || 1.0),
       primaryCrop: data.primaryCrop || 'Wheat',
       latitude: parseFloat(data.latitude || 8.54),
       longitude: parseFloat(data.longitude || 39.27),
-      polygonGeojson: data.polygonGeojson || null,
+      soilType: data.soilType || null,
+      irrigationType: data.irrigationType || null,
+      polygonGeojson,
+    },
+    include: {
+      woreda: { select: { id: true, nameEn: true, nameAm: true, zoneId: true } },
+      kebele: { select: { id: true, nameEn: true, nameAm: true } },
     },
   });
 
@@ -820,7 +858,7 @@ async function createFarm(data, adminContext = {}) {
     action: 'FARM_CREATED',
     adminId: adminContext.id,
     adminEmail: adminContext.email,
-    details: `Created farm ${created.farmName} (${created.areaHectares} Ha)`,
+    details: `Created farm ${created.farmName} (${created.areaHectares} Ha)${kebeleId ? ` in Kebele ${kebeleId}` : ''}`,
     ipAddress: adminContext.ip,
   });
 

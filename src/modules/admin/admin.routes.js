@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const controller = require('./admin.controller');
 const roleRequestController = require('../roleRequest/roleRequest.controller');
+const boundariesController = require('../boundaries/boundaries.controller');
 const env = require('../../config/env');
 
 // Import the unified auth middleware so adminAuth delegates JWT verification
@@ -211,6 +212,11 @@ router.get('/farms/:id', adminAuth, controller.getFarmDetails);
 router.post('/farms', adminAuth, controller.createFarm);
 router.put('/farms/:id', adminAuth, controller.updateFarm);
 router.delete('/farms/:id', adminAuth, controller.deleteFarm);
+
+// Kebele Management Routes (Admin & Expert)
+router.get('/kebeles', adminAuth, boundariesController.getKebeles);
+router.post('/kebeles', adminAuth, boundariesController.createKebele);
+router.put('/kebeles/:id/polygon', adminAuth, boundariesController.updateKebelePolygon);
 
 // Sensor Management Routes
 router.get('/sensors', adminAuth, controller.getSensors);

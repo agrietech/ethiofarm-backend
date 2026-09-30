@@ -48,12 +48,19 @@ async function createFarm(req, res, next) {
       throw new UnauthorizedError('Authentication required to register a farm');
     }
 
+    const kebeleId = body.kebeleId || body.kebele_id;
+    let targetUserId = userId;
+    if (body.userId && ['ADMIN', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER'].includes(req.user?.role)) {
+      targetUserId = body.userId;
+    }
+
     const farm = await farmsService.createFarm({
-      userId,
+      userId: targetUserId,
       farmName,
       primaryCrop,
       areaHectares,
       woredaId,
+      kebeleId,
       polygonGeojson,
       latitude,
       longitude,

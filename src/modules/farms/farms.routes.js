@@ -5,11 +5,11 @@ const controller = require('./farms.controller');
 const validate = require('../../middleware/validate.middleware');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
-// POST /api/v1/farms – Register a new farm (Strictly FARMER only)
+// POST /api/v1/farms – Register a new farm (Farmers and Agricultural Experts / DAs / Officers / Admins)
 router.post(
   '/',
   authenticate,
-  authorize('FARMER'),
+  authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'),
   [
     body('farmName')
       .trim()
@@ -23,18 +23,29 @@ router.post(
       .trim()
       .notEmpty()
       .withMessage('woredaId must be a non-empty string'),
+    body('kebeleId')
+      .optional()
+      .isString()
+      .trim(),
+    body('userId')
+      .optional()
+      .isString()
+      .trim(),
     body('polygonGeojson')
-      .notEmpty()
-      .withMessage('polygonGeojson GIS boundary is required to register a farm plot')
-      .isObject()
-      .withMessage('polygonGeojson must be a GeoJSON object'),
-    body('polygonGeojson.type')
-      .notEmpty()
-      .isIn(['Polygon', 'Feature'])
-      .withMessage('polygonGeojson.type must be "Polygon" or "Feature"'),
-    body('polygonGeojson.coordinates')
-      .isArray({ min: 1 })
-      .withMessage('polygonGeojson.coordinates must be an array of rings'),
+      .optional()
+      .custom((value) => {
+        if (!value) return true;
+        if (typeof value === 'string') {
+          try {
+            JSON.parse(value);
+            return true;
+          } catch {
+            throw new Error('polygonGeojson must be valid JSON');
+          }
+        }
+        if (typeof value === 'object' && value !== null) return true;
+        throw new Error('polygonGeojson must be a GeoJSON object or JSON string');
+      }),
     body('latitude')
       .optional()
       .isFloat()

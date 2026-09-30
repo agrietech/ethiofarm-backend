@@ -679,6 +679,109 @@ async function updateKebelePolygon({ kebeleId, polygonGeojson, user }) {
   return updated;
 }
 
+async function createKebele({
+  nameEn,
+  nameAm,
+  nameOm,
+  woredaId: inputWoredaId,
+  centerLat: inputLat,
+  centerLng: inputLng,
+  polygonGeojson,
+  elevationMeters,
+  agroZone,
+  dominantSoilType,
+  soilPh,
+  pcode,
+  ftcName,
+}, user = {}) {
+  if (!nameEn || !nameEn.trim()) {
+    throw new BadRequestError('Kebele name (nameEn) is required');
+  }
+
+  const { validateFarmPolygon, generateBoundingPolygon } = require('../farms/farmGeometry');
+  const centroid = require('@turf/centroid').default || require('@turf/centroid');
+  const { getCoord } = require('@turf/invariant');
+
+  let resolvedPolygon = null;
+  let lat = inputLat !== undefined && inputLat !== null ? Number(inputLat) : null;
+  let lng = inputLng !== undefined && inputLng !== null ? Number(inputLng) : null;
+
+  if (polygonGeojson) {
+    const validPolygon = validateFarmPolygon(polygonGeojson);
+    resolvedPolygon = validPolygon.geometry || validPolygon;
+    if (!lat || !lng) {
+      const [derivedLng, derivedLat] = getCoord(centroid(validPolygon));
+      lat = derivedLat;
+      lng = derivedLng;
+    }
+  }
+
+  // Auto-generate polygon around centerLat / centerLng if polygon was not provided
+  if (!resolvedPolygon && lat && lng) {
+    resolvedPolygon = generateBoundingPolygon(lat, lng, 10.0);
+  }
+
+  // Resolve woredaId
+  let woredaId = inputWoredaId || (user?.woredaId ? user.woredaId : null);
+  if (!woredaId && lat && lng) {
+    woredaId = await resolveWoredaByCoords(lat, lng);
+  }
+  if (!woredaId) {
+    const firstWoreda = await prisma.woreda.findFirst({ select: { id: true } });
+    woredaId = firstWoreda?.id || 'ET040101';
+  }
+
+  // Verify woreda exists
+  const woreda = await prisma.woreda.findUnique({ where: { id: woredaId } });
+  if (!woreda) {
+    throw new NotFoundError(`Woreda '${woredaId}' not found`);
+  }
+
+  if (!lat || !lng) {
+    lat = woreda.centerLat;
+    lng = woreda.centerLng;
+  }
+
+  // Jurisdiction check for DEVELOPMENT_AGENT
+  const userRole = (user?.role || '').toUpperCase();
+  if (userRole === 'DEVELOPMENT_AGENT' && user?.woredaId && user.woredaId !== woredaId) {
+    throw new ForbiddenError('Access denied: you can only register Kebeles within your assigned woreda jurisdiction');
+  }
+
+  const cleanName = nameEn.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const kebeleId = `keb_${woredaId.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${cleanName.slice(0, 15)}_${Date.now().toString().slice(-4)}`;
+
+  const created = await prisma.kebele.create({
+    data: {
+      id: kebeleId,
+      woredaId,
+      nameEn: nameEn.trim(),
+      nameAm: nameAm?.trim() || null,
+      nameOm: nameOm?.trim() || null,
+      pcode: pcode?.trim() || null,
+      elevationMeters: elevationMeters ? Number(elevationMeters) : null,
+      agroZone: agroZone || 'WEINA_DEGA',
+      dominantSoilType: dominantSoilType || null,
+      soilPh: soilPh ? Number(soilPh) : null,
+      centerLat: lat,
+      centerLng: lng,
+      geojson: resolvedPolygon || null,
+      ftcName: ftcName?.trim() || null,
+    },
+    include: {
+      woreda: {
+        include: {
+          zone: {
+            include: { region: true },
+          },
+        },
+      },
+    },
+  });
+
+  return created;
+}
+
 module.exports = {
   getRegions,
   getZones,
@@ -686,6 +789,7 @@ module.exports = {
   getWoredaById,
   getKebeles,
   getKebeleById,
+  createKebele,
   updateKebelePolygon,
   resolveWoredaByCoords,
   resolveKebeleByCoords,

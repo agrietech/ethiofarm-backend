@@ -111,15 +111,15 @@ describe('Farms Module API Suite', () => {
     expect(res.body.success).toBe(false);
   });
 
-  it('POST /api/v1/farms - should reject farm registration by non-farmer roles (403 Forbidden)', async () => {
-    const daUser = { id: 'usr_da_test_01', phoneNumber: '+251911990011', role: 'DEVELOPMENT_AGENT' };
-    const daToken = generateAccessToken(daUser);
+  it('POST /api/v1/farms - should reject farm registration by unauthorized roles (403 Forbidden)', async () => {
+    const researcherUser = { id: 'usr_res_test_01', phoneNumber: '+251911990011', role: 'RESEARCHER' };
+    const resToken = generateAccessToken(researcherUser);
 
     const res = await request(app)
       .post('/api/v1/farms')
-      .set('Authorization', `Bearer ${daToken}`)
+      .set('Authorization', `Bearer ${resToken}`)
       .send({
-        farmName: 'DA Unauthorized Farm Plot',
+        farmName: 'Researcher Unauthorized Farm Plot',
         polygonGeojson: {
           type: 'Polygon',
           coordinates: [
@@ -136,6 +136,53 @@ describe('Farms Module API Suite', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.success).toBe(false);
+  });
+
+  it('POST /api/v1/farms - should allow farm registration by agricultural expert (DEVELOPMENT_AGENT)', async () => {
+    const daUser = { id: 'usr_da_test_01', phoneNumber: '+251911990022', role: 'DEVELOPMENT_AGENT', woredaId: testWoreda?.id };
+    await prisma.user.upsert({
+      where: { id: daUser.id },
+      update: {},
+      create: {
+        id: daUser.id,
+        phoneNumber: daUser.phoneNumber,
+        fullName: 'Test DA Expert',
+        role: 'DEVELOPMENT_AGENT',
+      },
+    }).catch(() => {});
+
+    const daToken = generateAccessToken(daUser);
+
+    const res = await request(app)
+      .post('/api/v1/farms')
+      .set('Authorization', `Bearer ${daToken}`)
+      .send({
+        farmName: 'DA Model Demonstration Farm Plot',
+        primaryCrop: 'Wheat',
+        areaHectares: 2.0,
+        woredaId: testWoreda?.id,
+        polygonGeojson: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [39.26, 8.53],
+              [39.28, 8.53],
+              [39.28, 8.55],
+              [39.26, 8.55],
+              [39.26, 8.53],
+            ],
+          ],
+        },
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.farmName).toBe('DA Model Demonstration Farm Plot');
+
+    if (res.body.data.id) {
+      await prisma.farm.deleteMany({ where: { id: res.body.data.id } }).catch(() => {});
+    }
+    await prisma.user.deleteMany({ where: { id: daUser.id } }).catch(() => {});
   });
 
   it('GET /api/v1/farms - should list plots belonging to the authenticated user', async () => {
