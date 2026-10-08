@@ -28,18 +28,33 @@ const adminAuth = (req, res, next) => {
     return next();
   }
 
-  // 1. API Key Authentication (x-api-key header) — short-circuit before JWT path
+  // 1. API Key Authentication (x-api-key header) — mapped to real database Super Admin
   const apiKey = req.headers['x-api-key'] || req.headers['api-key'];
   if (apiKey) {
     const validKeys = getAdminApiKeySet();
     if (validKeys.size > 0 && validKeys.has(apiKey.trim())) {
-      req.user = { id: 'usr_admin_apikey', email: 'admin_apikey@ethiofarm.et', fullName: 'API Key Administrator', role: 'ADMIN' };
-      return next();
+      const { prisma } = require('../../config/db');
+      return prisma.user.findFirst({ where: { role: 'ADMIN' } })
+        .then((adminUser) => {
+          if (!adminUser) {
+            return res.status(403).json({
+              success: false,
+              error: { message: 'Super Administrator not found in database', code: 'FORBIDDEN' },
+            });
+          }
+          req.user = {
+            id: adminUser.id,
+            email: adminUser.email,
+            fullName: adminUser.fullName,
+            role: 'ADMIN',
+          };
+          return next();
+        })
+        .catch((err) => next(err));
     }
   }
 
   // 2. Cookie / query token: extract and place as Bearer header so sharedAuthenticate handles it.
-  //    This keeps all JWT signing/blacklist/expiry logic in one place.
   const cookieToken = getCookie(req, 'admin_token') || getCookie(req, 'accessToken');
   const queryToken = req.query.token || req.query.accessToken;
   const fallbackToken = cookieToken || queryToken;
@@ -58,14 +73,11 @@ const adminAuth = (req, res, next) => {
       });
     }
 
-    // 4. Role check — DA, Officers, Admin can access the panel; FARMER/RESEARCHER cannot
-    const allowedRoles = [
-      'ADMIN', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT',
-    ];
-    if (!allowedRoles.includes(req.user.role)) {
+    // 4. Strict Super Admin role enforcement
+    if (req.user.role !== 'ADMIN') {
       return res.status(403).json({
         success: false,
-        error: { message: 'Insufficient administrative privileges', code: 'FORBIDDEN' },
+        error: { message: 'Access denied: National Super Administrator privileges required', code: 'FORBIDDEN' },
       });
     }
     next();
@@ -103,27 +115,29 @@ const adminPageAuth = async (req, res, next) => {
   const headerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
   const apiKey = req.headers['x-api-key'] || req.headers['api-key'];
 
-  const tokenCandidate = queryToken || cookieToken || headerToken;
+  const tokenCandidate = (queryToken || cookieToken || headerToken || apiKey || '').toString().trim();
+  const validKeys = env.getAdminKeys ? env.getAdminKeys() : [];
 
-  const validKeys = env.getAdminKeys ? env.getAdminKeys() : [
-    ...(process.env.ADMIN_API_KEYS || '').split(','),
-    process.env.ADMIN_CONSOLE_PASSWORD,
-    process.env.ADMIN_PASSWORD,
-    process.env.ADMIN_SECRET,
-    process.env.ADMIN_KEY,
-    process.env.ADMIN_PASS,
-    process.env.ADMIN_TOKEN,
-  ].map(k => (k || '').trim()).filter(Boolean);
-
-  if (apiKey && validKeys.includes(apiKey.trim())) {
-    return next();
-  }
-
-  if (tokenCandidate && validKeys.includes(tokenCandidate.trim())) {
-    const isProd = process.env.NODE_ENV === 'production';
-    const secureFlag = isProd ? '; Secure' : '';
-    res.setHeader('Set-Cookie', `admin_token=${tokenCandidate.trim()}; Path=/admin; HttpOnly; SameSite=Lax; Max-Age=86400${secureFlag}`);
-    return next();
+  if (tokenCandidate && validKeys.includes(tokenCandidate)) {
+    try {
+      const { prisma } = require('../../config/db');
+      let adminUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+      if (!adminUser) {
+        const bcrypt = require('bcryptjs');
+        const hash = await bcrypt.hash(tokenCandidate, 10);
+        adminUser = await prisma.user.create({
+          data: {
+            email: env.ADMIN_EMAIL || 'admin@ethiofarm.et',
+            fullName: 'National Super Administrator',
+            role: 'ADMIN',
+            passwordHash: hash,
+            isEmailVerified: true,
+          },
+        });
+      }
+      req.user = { id: adminUser.id, email: adminUser.email, role: 'ADMIN', fullName: adminUser.fullName };
+      return next();
+    } catch (_) {}
   }
 
   if (tokenCandidate) {
@@ -132,8 +146,7 @@ const adminPageAuth = async (req, res, next) => {
       const env = require('../../config/env');
       if (!(await isTokenBlacklisted(tokenCandidate))) {
         const decoded = jwt.verify(tokenCandidate, env.JWT_SECRET);
-        const allowedRoles = ['ADMIN', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT'];
-        if (decoded && allowedRoles.includes(decoded.role)) {
+        if (decoded && decoded.role === 'ADMIN') {
           req.user = decoded;
           return next();
         }
@@ -155,8 +168,7 @@ router.get('/login', (req, res) => {
       const jwt = require('jsonwebtoken');
       const env = require('../../config/env');
       const decoded = jwt.verify(cookieToken, env.JWT_SECRET);
-      const allowedRoles = ['ADMIN', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT'];
-      if (decoded && allowedRoles.includes(decoded.role)) {
+      if (decoded && decoded.role === 'ADMIN') {
         return res.redirect('/admin/dashboard');
       }
     } catch (_) {}

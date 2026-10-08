@@ -272,7 +272,7 @@
     <div class="card-body">
       <div id="alertBox" class="alert-box alert-danger"></div>
 
-      <!-- Tab Switcher (Accessible Buttons) -->
+      <!-- Tab Switcher -->
       <div class="auth-tabs" role="tablist">
         <button type="button" id="tabAccountBtn" class="auth-tab active" data-tab="account" onclick="selectAuthMode('account')" role="tab" aria-selected="true">
           <span>👤</span> Admin Account
@@ -285,18 +285,18 @@
         </button>
       </div>
 
-      <!-- Form 1: Admin Account (Email/Password) -->
+      <!-- Form 1: Official Super Administrator Login Form -->
       <form id="accountForm" action="/admin/login" method="POST" onsubmit="handleAccountSubmit(event)">
         <div class="form-group">
-          <label class="form-label" for="adminEmail">Official Email Address</label>
-          <input type="text" name="email" id="adminEmail" class="form-input" placeholder="admin@organization.et" required autocomplete="username">
-          <div class="helper-text">Enter your authorized administrative email address.</div>
+          <label class="form-label" for="adminEmail">Administrator Email or Phone</label>
+          <input type="text" name="email" id="adminEmail" class="form-input" placeholder="admin@agrietech.et" required autocomplete="username">
+          <div class="helper-text">Enter your registered National Super Administrator email or phone.</div>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="adminPassword">Administrative Password</label>
-          <input type="password" name="password" id="adminPassword" class="form-input" placeholder="Enter your password" required autocomplete="current-password">
-          <div class="helper-text">Enter your administrative password or master key.</div>
+          <input type="password" name="password" id="adminPassword" class="form-input" placeholder="Enter administrative password" required autocomplete="current-password">
+          <div class="helper-text">Accepts database password or Render environment master key.</div>
         </div>
 
         <button type="submit" id="accountSubmitBtn" class="btn-submit">
@@ -304,37 +304,37 @@
         </button>
       </form>
 
-      <!-- Form 2: Master Console Key / Passcode -->
+      <!-- Form 2: Render Master Security Key Form -->
       <form id="keyForm" action="/admin/login" method="POST" style="display: none;" onsubmit="handleKeySubmit(event)">
         <div class="form-group">
-          <label class="form-label" for="consoleKey">Master Console Key / Passcode</label>
-          <input type="password" name="consoleKey" id="consoleKey" class="form-input" placeholder="Enter master security key or passcode" required autocomplete="off">
-          <div class="helper-text">Authenticate directly using your cloud master security key.</div>
+          <label class="form-label" for="consoleKey">Render Master Security Key</label>
+          <input type="password" name="consoleKey" id="consoleKey" class="form-input" placeholder="Enter Render ADMIN_KEY / Master Key" required autocomplete="off">
+          <div class="helper-text">Directly authenticates with your Render environment variable key.</div>
         </div>
 
         <button type="submit" id="keySubmitBtn" class="btn-submit">
-          <span>⚡</span> Authenticate Master Key
+          <span>⚡</span> Authenticate with Master Key
         </button>
       </form>
 
-      <!-- Form 3: Set / Reset Password -->
+      <!-- Form 3: Set / Reset Password with Render Master Key -->
       <form id="resetForm" action="/admin/reset-password" method="POST" style="display: none;" onsubmit="handleResetSubmit(event)">
         <div class="form-group">
           <label class="form-label" for="resetEmail">Administrator Email</label>
-          <input type="email" name="email" id="resetEmail" class="form-input" placeholder="admin@organization.et" required>
-          <div class="helper-text">Email address for the administrator account.</div>
+          <input type="email" name="email" id="resetEmail" class="form-input" placeholder="admin@agrietech.et" required>
+          <div class="helper-text">Email address for the administrator account in the database.</div>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="resetMasterKey">Master Security Authorization Key</label>
-          <input type="password" name="masterKey" id="resetMasterKey" class="form-input" placeholder="Enter master security authorization key" required>
-          <div class="helper-text">Requires valid master console security key to authorize changes.</div>
+          <label class="form-label" for="resetMasterKey">Render Master Security Key</label>
+          <input type="password" name="masterKey" id="resetMasterKey" class="form-input" placeholder="Enter Render environment master key" required>
+          <div class="helper-text">Authorizes password update using Render environment credentials.</div>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="resetNewPassword">New Desired Password</label>
           <input type="password" name="newPassword" id="resetNewPassword" class="form-input" placeholder="Enter new password (min 6 characters)" required>
-          <div class="helper-text">Set your personal administrator password.</div>
+          <div class="helper-text">Set your personal database password.</div>
         </div>
 
         <button type="submit" id="resetSubmitBtn" class="btn-submit">
@@ -349,7 +349,6 @@
   </div>
 
   <script>
-    // Tab Mode Switching with full DOM robustness
     function selectAuthMode(mode) {
       const alertEl = document.getElementById('alertBox');
       if (alertEl) alertEl.style.display = 'none';
@@ -380,17 +379,7 @@
       if (resetForm) resetForm.style.display = mode === 'reset' ? 'block' : 'none';
     }
 
-    // Attach listeners directly to tabs as well
     document.addEventListener('DOMContentLoaded', function() {
-      const tabs = document.querySelectorAll('.auth-tab');
-      tabs.forEach(function(tab) {
-        tab.addEventListener('click', function(e) {
-          e.preventDefault();
-          const mode = this.getAttribute('data-tab');
-          if (mode) selectAuthMode(mode);
-        });
-      });
-
       // Parse error parameters from URL
       try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -444,7 +433,6 @@
           btn.innerHTML = '<span>🔐</span> Unlock Console';
         }
       } catch (err) {
-        // Fallback to native form submission if fetch is interrupted
         document.getElementById('accountForm').submit();
       }
     }
@@ -455,12 +443,12 @@
       const btn = document.getElementById('keySubmitBtn');
 
       if (!consoleKey) {
-        showAlert('Please enter the Master Console Key');
+        showAlert('Please enter the Render Master Security Key');
         return;
       }
 
       btn.disabled = true;
-      btn.innerHTML = '<span>⏳</span> Authenticating key...';
+      btn.innerHTML = '<span>⏳</span> Authenticating with Render Master Key...';
       const alertEl = document.getElementById('alertBox');
       if (alertEl) alertEl.style.display = 'none';
 
@@ -480,9 +468,9 @@
           if (json.user) localStorage.setItem('adminUser', JSON.stringify(json.user));
           window.location.href = json.redirect || '/admin/dashboard';
         } else {
-          showAlert(json.message || 'Invalid Master Console Key');
+          showAlert(json.message || 'Invalid Render Master Security Key');
           btn.disabled = false;
-          btn.innerHTML = '<span>⚡</span> Authenticate Master Key';
+          btn.innerHTML = '<span>⚡</span> Authenticate with Master Key';
         }
       } catch (err) {
         document.getElementById('keyForm').submit();
