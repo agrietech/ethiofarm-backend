@@ -1,6 +1,10 @@
 const axios = require('axios');
 const logger = require('../../utils/logger');
 
+// In-Memory L1 Cache for Country Climate Baseline (24-hour TTL)
+const climateNormalsCache = new Map();
+const CLIMATE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
 const worldBankClimateConnector = {
   name: 'WORLD_BANK_CLIMATE',
   
@@ -10,6 +14,12 @@ const worldBankClimateConnector = {
    * to authoritative ECMWF ERA5 Climate Reanalysis Archive for real historical observations.
    */
   async fetchHistoricalTemperature({ countryCode = 'ETH', startYear = 2015, endYear = 2024 }) {
+    const cacheKey = `temp_${countryCode}_${startYear}_${endYear}`;
+    const cached = climateNormalsCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
     try {
       // 1. Try legacy World Bank endpoint if custom URL is configured
       if (process.env.WORLD_BANK_CLIMATE_URL) {
@@ -21,7 +31,7 @@ const worldBankClimateConnector = {
             if (startYear || endYear) {
               data = data.filter(d => (!startYear || d.year >= startYear) && (!endYear || d.year <= endYear));
             }
-            return {
+            const resData = {
               source: 'WORLD_BANK_CLIMATE',
               countryCode,
               dataPoints: data.length,
@@ -29,6 +39,8 @@ const worldBankClimateConnector = {
               latestYear: data.length > 0 ? data[data.length - 1].year : null,
               latestTemp: data.length > 0 ? data[data.length - 1].data : null,
             };
+            climateNormalsCache.set(cacheKey, { data: resData, expiresAt: Date.now() + CLIMATE_CACHE_TTL_MS });
+            return resData;
           }
         } catch (_) {
           // Fall through to live ERA5 reanalysis archive
@@ -62,7 +74,7 @@ const worldBankClimateConnector = {
             unit: 'Celsius',
           }));
 
-        return {
+        const result = {
           source: 'ERA5_CLIMATE_REANALYSIS_LIVE',
           countryCode,
           dataPoints: data.length,
@@ -70,12 +82,14 @@ const worldBankClimateConnector = {
           latestYear: data.length > 0 ? data[data.length - 1].year : null,
           latestTemp: data.length > 0 ? data[data.length - 1].temperature : null,
         };
+        climateNormalsCache.set(cacheKey, { data: result, expiresAt: Date.now() + CLIMATE_CACHE_TTL_MS });
+        return result;
       }
       
       throw new Error('No historical climate data returned from archive');
     } catch (err) {
       logger.warn(`[WorldBankClimate] Fallback triggered for ${countryCode}: ${err.message}`);
-      return {
+      const fallbackResult = {
         source: 'WORLD_BANK_CLIMATE_BASELINE',
         countryCode,
         dataPoints: 5,
@@ -89,6 +103,8 @@ const worldBankClimateConnector = {
         latestYear: 2024,
         latestTemp: 23.2,
       };
+      climateNormalsCache.set(cacheKey, { data: fallbackResult, expiresAt: Date.now() + CLIMATE_CACHE_TTL_MS });
+      return fallbackResult;
     }
   },
   
@@ -96,6 +112,12 @@ const worldBankClimateConnector = {
    * Fetch live annual historical precipitation data.
    */
   async fetchHistoricalPrecipitation({ countryCode = 'ETH', startYear = 2015, endYear = 2024 }) {
+    const cacheKey = `precip_${countryCode}_${startYear}_${endYear}`;
+    const cached = climateNormalsCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
     try {
       if (process.env.WORLD_BANK_CLIMATE_URL) {
         try {
@@ -106,7 +128,7 @@ const worldBankClimateConnector = {
             if (startYear || endYear) {
               data = data.filter(d => (!startYear || d.year >= startYear) && (!endYear || d.year <= endYear));
             }
-            return {
+            const resData = {
               source: 'WORLD_BANK_CLIMATE',
               countryCode,
               dataPoints: data.length,
@@ -114,6 +136,8 @@ const worldBankClimateConnector = {
               latestYear: data.length > 0 ? data[data.length - 1].year : null,
               latestPrecip: data.length > 0 ? data[data.length - 1].data : null,
             };
+            climateNormalsCache.set(cacheKey, { data: resData, expiresAt: Date.now() + CLIMATE_CACHE_TTL_MS });
+            return resData;
           }
         } catch (_) {
           // Fall through to live ERA5 reanalysis archive
@@ -145,7 +169,7 @@ const worldBankClimateConnector = {
             unit: 'mm',
           }));
 
-        return {
+        const result = {
           source: 'ERA5_CLIMATE_REANALYSIS_LIVE',
           countryCode,
           dataPoints: data.length,
@@ -153,12 +177,14 @@ const worldBankClimateConnector = {
           latestYear: data.length > 0 ? data[data.length - 1].year : null,
           latestPrecip: data.length > 0 ? data[data.length - 1].precipitation : null,
         };
+        climateNormalsCache.set(cacheKey, { data: result, expiresAt: Date.now() + CLIMATE_CACHE_TTL_MS });
+        return result;
       }
       
       throw new Error('No historical precipitation data returned from archive');
     } catch (err) {
       logger.warn(`[WorldBankClimate] Precipitation fallback for ${countryCode}: ${err.message}`);
-      return {
+      const fallbackResult = {
         source: 'WORLD_BANK_CLIMATE_BASELINE',
         countryCode,
         dataPoints: 5,
@@ -172,6 +198,8 @@ const worldBankClimateConnector = {
         latestYear: 2024,
         latestPrecip: 890,
       };
+      climateNormalsCache.set(cacheKey, { data: fallbackResult, expiresAt: Date.now() + CLIMATE_CACHE_TTL_MS });
+      return fallbackResult;
     }
   }
 };
