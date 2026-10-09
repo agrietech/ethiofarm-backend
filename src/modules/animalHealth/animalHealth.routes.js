@@ -13,6 +13,7 @@ router.get('/diseases/:diseaseId', authorize('ADMIN', 'RESEARCHER', 'REGIONAL_OF
 // Outbreak reporting and tracking
 router.post('/outbreaks', authorize('ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT', 'FARMER'), authorizeWoredaScope('woredaId'), controller.reportOutbreak);
 router.get('/outbreaks', authorize('ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT', 'FARMER'), controller.getOutbreaks);
+router.get('/outbreaks/:id', authorize('ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT', 'FARMER'), controller.getOutbreakById);
 
 // Livestock registry
 router.post('/livestock', authorize('ADMIN', 'RESEARCHER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT', 'FARMER'), authorizeWoredaScope('woredaId'), controller.registerLivestock);
@@ -22,6 +23,7 @@ router.get('/livestock', authorize('ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER', 'Z
 router.post('/vaccinations', authorize('ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT'), authorizeWoredaScope('woredaId'), controller.recordVaccination);
 router.get('/vaccinations', authorize('ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT', 'FARMER'), authorizeWoredaScope('woredaId'), controller.getVaccinationStatus);
 router.get('/campaigns', authorize('ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT', 'FARMER'), authorizeWoredaScope('woredaId'), controller.getCampaigns);
+router.post('/campaigns', authorize('ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT'), authorizeWoredaScope('woredaId'), controller.createCampaign);
 
 // Pasture/forage condition (NDVI-based)
 router.get('/pasture-condition', authorize('ADMIN', 'RESEARCHER', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT', 'FARMER'), authorizeWoredaScope('woredaId'), controller.getPastureCondition);
