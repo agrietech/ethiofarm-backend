@@ -486,11 +486,6 @@ async function broadcastEmergencyAlert(data, adminContext = {}) {
         logger.warn(`[AdminService] Farmer lookup warning: ${lookupErr.message}`);
       }
 
-      if (recipientsCount === 0) {
-        recipientPhones = ['+251911223344', '+251922334455'];
-        recipientsCount = 42;
-      }
-
       // Dispatch SMS / USSD notification if requested
       const sendSms = data.sendSms !== false;
       const sendUssd = data.sendUssd !== false;
@@ -529,48 +524,21 @@ async function broadcastEmergencyAlert(data, adminContext = {}) {
         deliveryTimestamp: new Date().toISOString(),
       };
     } catch (err) {
-      logger.warn(`[AdminService] Emergency alert DB write notice: ${err.message}`);
+      logger.error(`[AdminService] Emergency alert DB write error: ${err.message}`);
+      throw err;
     }
   }
 
-  const fallbackAlert = {
-    id: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-    woredaId: woredaId || 'woreda_adama_01',
-    hazardType,
-    severity,
-    headline: titleEn,
-    status: 'ACTIVE',
-    titleEn,
-    titleAm,
-    messageEn,
-    messageAm,
-    recipientsCount: 42,
-    sendSms: true,
-    sendUssd: true,
-    channels: ['SMS', 'USSD_FLASH', 'USSD (*212#)', 'IN_APP_PUSH'],
-    deliveryStatus: 'DISPATCHED',
-    deliveryTimestamp: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-  };
-
-  await logAuditAction({
-    action: 'EMERGENCY_ALERT_BROADCAST',
-    adminId: adminContext.id || null,
-    adminEmail: adminContext.email || null,
-    details: `Broadcasted ${severity} ${hazardType} alert to woreda ${fallbackAlert.woredaId} (42 farmers notified via SMS/USSD)`,
-    ipAddress: adminContext.ip || null,
-  });
-
-  return fallbackAlert;
+  throw new Error('Database connection unavailable for alert broadcast');
 }
 
 /**
  * Get signed-up farmer audience metrics for target jurisdiction (for USSD/SMS broadcasting)
  */
 async function getFarmerAudienceStats({ woredaId, regionId, cropType } = {}) {
-  let totalFarmers = 1240;
-  let phoneReachable = 1180;
-  let cropBreakdown = { 'WHEAT': 520, 'TEFF': 410, 'MAIZE': 190, 'BARLEY': 60 };
+  let totalFarmers = 0;
+  let phoneReachable = 0;
+  let cropBreakdown = {};
 
   if (isConnected()) {
     try {
@@ -611,15 +579,15 @@ async function getFarmerAudienceStats({ woredaId, regionId, cropType } = {}) {
     }
   }
 
-  const reachabilityPct = totalFarmers > 0 ? Math.round((phoneReachable / totalFarmers) * 100) : 95;
+  const reachabilityPct = totalFarmers > 0 ? Math.round((phoneReachable / totalFarmers) * 100) : 0;
   const cropDistribution = Object.entries(cropBreakdown).map(([crop, count]) => ({ crop, count }));
 
   return {
     woredaId: woredaId || 'ALL',
     regionId: regionId || 'ALL',
-    totalFarmers: totalFarmers || 45,
-    totalSignedUpFarmers: totalFarmers || 45,
-    phoneReachableFarmers: phoneReachable || 42,
+    totalFarmers,
+    totalSignedUpFarmers: totalFarmers,
+    phoneReachableFarmers: phoneReachable,
     reachabilityPercentage: reachabilityPct,
     smsReachablePercentage: reachabilityPct,
     cropBreakdown,
@@ -1041,211 +1009,20 @@ async function getAlerts({ page = 1, limit = 50, hazardType, severity, woredaId,
         }),
         prisma.alert.count({ where }),
       ]);
-      if (alerts.length > 0) {
-        return { alerts, pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / take) || 1 } };
-      }
+      return { alerts, pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / take) || 0 } };
     } catch (err) {
-      logger.warn(`[AdminService] getAlerts DB query notice: ${err.message}`);
+      logger.error(`[AdminService] getAlerts DB query error: ${err.message}`);
+      throw err;
     }
   }
 
-  // Realistic Ethiopian Agricultural Hazard Alerts Dataset across Regions & Woredas
-  const sampleEthiopianAlerts = [
-    {
-      id: 'alert_eth_01',
-      woredaId: 'woreda_adama_01',
-      hazardType: 'DROUGHT',
-      severity: 'CRITICAL',
-      headline: 'Severe Moisture Deficit Alert (SPI-3: -1.92)',
-      titleEn: 'Severe Drought Warning in Central Rift Valley',
-      titleAm: 'በመካከለኛው ስምጥ ሸለቆ ከባድ የድርቅ አደጋ ማስጠንቀቂያ',
-      messageEn: 'Rainfall anomaly exceeds -45% below decadal mean. Immediate furrow mulching and supplementary irrigation recommended for teff and wheat.',
-      messageAm: 'የዝናብ እጥረት ከመደበኛው አማካይ በ45% ቀንሷል። አፋጣኝ የውሃ ማቆር እና የድርቅ መቋቋሚያ ስልቶችን ይጠቀሙ።',
-      woreda: {
-        id: 'woreda_adama_01',
-        nameEn: 'Adama Zuria',
-        nameAm: 'አዳማ ዙሪያ',
-        centerLat: 8.54,
-        centerLng: 39.27,
-        zone: { nameEn: 'East Shewa', regionId: 'reg_oromia', region: { nameEn: 'Oromia', nameAm: 'ኦሮሚያ' } },
-      },
-      affectedAreaKm2: 1240,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'alert_eth_02',
-      woredaId: 'woreda_bahir_dar_01',
-      hazardType: 'FLOOD',
-      severity: 'HIGH',
-      headline: 'Lake Tana Shoreline & Ribb River High Discharge',
-      titleEn: 'Riverine Flood Risk along Lake Tana Basin',
-      titleAm: 'ጣና ሃይቅ እና ርብ ወንዝ ዳርቻ የጎርፍ አደጋ ስጋት',
-      messageEn: 'Ribb & Gumara river discharge at 410 m³/s. Low-lying maize and rice plots at immediate flood inundation hazard.',
-      messageAm: 'የወንዞች ሙላት መጠን ጨምሯል። ዝቅተኛ የእርሻ መሬቶች ላይ የጎርፍ መከላከል መስመሮችን ያዘጋጁ።',
-      woreda: {
-        id: 'woreda_bahir_dar_01',
-        nameEn: 'Bahir Dar Zuria',
-        nameAm: 'ባሕር ዳር ዙሪያ',
-        centerLat: 11.59,
-        centerLng: 37.39,
-        zone: { nameEn: 'West Gojjam', regionId: 'reg_amhara', region: { nameEn: 'Amhara', nameAm: 'አማራ' } },
-      },
-      affectedAreaKm2: 890,
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-    },
-    {
-      id: 'alert_eth_03',
-      woredaId: 'woreda_semara_01',
-      hazardType: 'LOCUST_PEST',
-      severity: 'CRITICAL',
-      headline: 'Desert Locust Swarm Influx Detected (FAO Band 4)',
-      titleEn: 'Desert Locust Swarms Crossing Eastern Lowlands',
-      titleAm: 'የበረሃ አንበጣ መንጋ ምስራቃዊ ዝቅተኛ ቦታዎች ላይ መግባቱ ተረጋግጧል',
-      messageEn: 'Immature locust swarms reported heading southwest from Djibouti border. Pastoral rangelands and sorghum crops under imminent threat.',
-      messageAm: 'የአንበጣ መንጋዎች በሰብል እና በግጦሽ መሬቶች ላይ ጉዳት ከማድረሳቸው በፊት ኬሚካል ይርጩ።',
-      woreda: {
-        id: 'woreda_semara_01',
-        nameEn: 'Semara / Dubti',
-        nameAm: 'ሰመራ / ዱብቲ',
-        centerLat: 11.79,
-        centerLng: 41.01,
-        zone: { nameEn: 'Zone 1 (Awsi Rasu)', regionId: 'reg_afar', region: { nameEn: 'Afar', nameAm: 'አፋር' } },
-      },
-      affectedAreaKm2: 2400,
-      createdAt: new Date(Date.now() - 7200000).toISOString(),
-    },
-    {
-      id: 'alert_eth_04',
-      woredaId: 'woreda_debre_berhan_01',
-      hazardType: 'FROST',
-      severity: 'HIGH',
-      headline: 'Severe Nocturnal Highland Frost Advisory (< 2°C)',
-      titleEn: 'Frost Warning for Dega Wheat & Barley Holdings',
-      titleAm: 'በደጋማ ስንዴ እና ገብስ አብቃይ ቦታዎች የውርጭ አደጋ ማስጠንቀቂያ',
-      messageEn: 'Ground temperatures dropping below 1.5°C before dawn. Cover nursery seedbeds and burn controlled organic biomass to prevent freeze damage.',
-      messageAm: 'የሌሊት ቅዝቃዜ በከፍተኛ ሁኔታ ስለሚቀንስ የችግኝ ማቆያዎች እና ሰብሎች በውርጭ እንዳይጎዱ ጥበቃ ያድርጉ።',
-      woreda: {
-        id: 'woreda_debre_berhan_01',
-        nameEn: 'Debre Berhan Zuria',
-        nameAm: 'ደብረ ብርሃን ዙሪያ',
-        centerLat: 9.68,
-        centerLng: 39.53,
-        zone: { nameEn: 'North Shewa', regionId: 'reg_amhara', region: { nameEn: 'Amhara', nameAm: 'አማራ' } },
-      },
-      affectedAreaKm2: 650,
-      createdAt: new Date(Date.now() - 10800000).toISOString(),
-    },
-    {
-      id: 'alert_eth_05',
-      woredaId: 'woreda_hawassa_01',
-      hazardType: 'VEGETATION_STRESS',
-      severity: 'MODERATE',
-      headline: 'Vegetation NDVI Anomaly (-0.28) & Coffee Berry Disease Risk',
-      titleEn: 'Coffee Canopy Stress & Berry Disease Risk',
-      titleAm: 'የቡና ዛፎች ቅጠል መርገፍ እና የቡና በሽታ ስጋት',
-      messageEn: 'Elevated humidity paired with afternoon heat spikes increasing fungal sporulation in highland coffee plots.',
-      messageAm: 'ከፍተኛ እርጥበት ለፈንገስ በሽታ መስፋፋት አመቺ ስለሆነ የቡና እርሻዎችን በፍጥነት ይመርምሩ።',
-      woreda: {
-        id: 'woreda_hawassa_01',
-        nameEn: 'Hawassa Zuria',
-        nameAm: 'ሐዋሳ ዙሪያ',
-        centerLat: 7.05,
-        centerLng: 38.48,
-        zone: { nameEn: 'Sidama Central', regionId: 'reg_sidama', region: { nameEn: 'Sidama', nameAm: 'ሲዳማ' } },
-      },
-      affectedAreaKm2: 480,
-      createdAt: new Date(Date.now() - 14400000).toISOString(),
-    },
-    {
-      id: 'alert_eth_06',
-      woredaId: 'woreda_mekelle_01',
-      hazardType: 'DROUGHT',
-      severity: 'HIGH',
-      headline: 'Late Meher Soil Dryness & Rain Delay (SPI: -1.65)',
-      titleEn: 'Agricultural Drought Alert in Southern & Eastern Tigray',
-      titleAm: 'በደቡብና ምሥራቅ ትግራይ የግብርና ድርቅ ማስጠንቀቂያ',
-      messageEn: 'Soil moisture reserves below 18% in root zone. Water harvesting structures must be deployed immediately.',
-      messageAm: 'የአፈር እርጥበት መጠን እጅግ ዝቅተኛ በመሆኑ የውሃ ማቆር ስራዎች በአስቸኳይ እንዲተገበሩ ይመከራል።',
-      woreda: {
-        id: 'woreda_mekelle_01',
-        nameEn: 'Mekelle / Enderta',
-        nameAm: 'መቐለ / እንዳርታ',
-        centerLat: 13.50,
-        centerLng: 39.47,
-        zone: { nameEn: 'Southeastern Tigray', regionId: 'reg_tigray', region: { nameEn: 'Tigray', nameAm: 'ትግራይ' } },
-      },
-      affectedAreaKm2: 1150,
-      createdAt: new Date(Date.now() - 18000000).toISOString(),
-    },
-    {
-      id: 'alert_eth_07',
-      woredaId: 'woreda_jijiga_01',
-      hazardType: 'DROUGHT',
-      severity: 'CRITICAL',
-      headline: 'Extreme Lowland Drought & Water Point Depletion',
-      titleEn: 'Critical Drought Emergency in Somali Lowlands',
-      titleAm: 'በሶማሌ ክልል ቆላማ አካባቢዎች እጅግ ከባድ የድርቅ አደጋ',
-      messageEn: 'Successive failed rainfall seasons causing extensive rangeland forage depletion. Livestock water trucking activated.',
-      messageAm: 'ተከታታይ የዝናብ መጥፋት ከፍተኛ የውሃ እና መኖ እጥረት አስከትሏል። አስቸኳይ እርዳታ ያስፈልጋል።',
-      woreda: {
-        id: 'woreda_jijiga_01',
-        nameEn: 'Jijiga Zuria',
-        nameAm: 'ጅጅጋ ዙሪያ',
-        centerLat: 9.35,
-        centerLng: 42.80,
-        zone: { nameEn: 'Fafan Zone', regionId: 'reg_somali', region: { nameEn: 'Somali', nameAm: 'ሶማሌ' } },
-      },
-      affectedAreaKm2: 3200,
-      createdAt: new Date(Date.now() - 21600000).toISOString(),
-    },
-    {
-      id: 'alert_eth_08',
-      woredaId: 'woreda_sodo_01',
-      hazardType: 'FLOOD',
-      severity: 'HIGH',
-      headline: 'Steep Slope Landslide & Runoff Inundation Threat',
-      titleEn: 'Flash Flood & Landslide Warning in Wolaita Highlands',
-      titleAm: 'በወላይታ ደጋማ ቦታዎች የድንገተኛ ጎርፍ እና የመሬት መንሸራተት ስጋት',
-      messageEn: 'Torrential downpours on steep escarpment soils (slope > 18%) trigger critical landslide hazard. Terracing integrity check required.',
-      messageAm: 'ከባድ ዝናብ በመሬት መንሸራተት አደጋ እንዳያስከትል ገደላማ የእርሻ መሬቶች ላይ ጥንቃቄ ያድርጉ።',
-      woreda: {
-        id: 'woreda_sodo_01',
-        nameEn: 'Wolaita Sodo',
-        nameAm: 'ወላይታ ሶዶ',
-        centerLat: 6.86,
-        centerLng: 37.76,
-        zone: { nameEn: 'Wolaita', regionId: 'reg_snnp', region: { nameEn: 'South Ethiopia', nameAm: 'ደቡብ ኢትዮጵያ' } },
-      },
-      affectedAreaKm2: 720,
-      createdAt: new Date(Date.now() - 25200000).toISOString(),
-    },
-  ];
-
-  let filtered = sampleEthiopianAlerts;
-  if (hazardType && hazardType !== 'ALL') {
-    let normH = hazardType.toUpperCase();
-    if (normH === 'PEST') normH = 'LOCUST_PEST';
-    if (normH === 'DISEASE' || normH === 'STRESS') normH = 'VEGETATION_STRESS';
-    filtered = filtered.filter(a => a.hazardType === normH);
-  }
-  if (severity && severity !== 'ALL') {
-    let normS = severity.toUpperCase();
-    if (normS === 'WARNING') normS = 'MODERATE';
-    filtered = filtered.filter(a => a.severity === normS);
-  }
-  if (woredaId && woredaId !== 'ALL' && woredaId !== 'NATIONAL') {
-    filtered = filtered.filter(a => a.woredaId === woredaId || a.woreda?.nameEn?.toLowerCase()?.includes(woredaId.toLowerCase()));
-  } else if (regionId && regionId !== 'ALL' && regionId !== 'NATIONAL') {
-    filtered = filtered.filter(a => a.woreda?.zone?.regionId === regionId || a.woreda?.zone?.region?.nameEn?.toLowerCase()?.includes(regionId.toLowerCase()));
-  }
-
   return {
-    alerts: filtered,
+    alerts: [],
     pagination: {
       page: Number(page),
       limit: Number(limit),
-      total: filtered.length,
-      totalPages: 1,
+      total: 0,
+      totalPages: 0,
     },
   };
 }
