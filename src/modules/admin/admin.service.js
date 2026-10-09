@@ -138,6 +138,13 @@ async function getOverview(user = null) {
   }
 
   return {
+    usersCount: totalUsers,
+    farmsCount: totalFarms,
+    sensorsCount: totalSensors,
+    activeSensorsCount: activeSensors,
+    alertsCount: totalAlerts,
+    diagnosesCount: totalDiagnoses,
+    roleDistribution,
     metrics: {
       totalUsers,
       roleDistribution,
