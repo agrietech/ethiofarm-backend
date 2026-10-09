@@ -43,178 +43,27 @@ function getDiseaseDetails(diseaseId) {
   return disease;
 }
 
+// ─── Outbreak & Campaign Helpers ─────────────────────────────────────────────
+
+async function resolveValidWoreda(woredaId) {
+  if (woredaId) {
+    const existing = await prisma.woreda.findUnique({
+      where: { id: woredaId },
+      select: { id: true, nameEn: true, nameAm: true, centerLat: true, centerLng: true },
+    });
+    if (existing) return existing;
+  }
+  const adama = await prisma.woreda.findUnique({
+    where: { id: 'woreda_adama_01' },
+    select: { id: true, nameEn: true, nameAm: true, centerLat: true, centerLng: true },
+  });
+  if (adama) return adama;
+  return await prisma.woreda.findFirst({
+    select: { id: true, nameEn: true, nameAm: true, centerLat: true, centerLng: true },
+  });
+}
+
 // ─── Disease Outbreak Reporting & Tracking ────────────────────────────────────
-
-// In-memory resilient outbreak store with realistic Ethiopian field data
-const inMemoryOutbreaks = [
-  {
-    id: 'outbreak_borana_001',
-    woredaId: 'woreda_yabelo_01',
-    woredaName: 'Yabelo (Borana Zone)',
-    woredaNameAm: 'ያቤሎ (ቦረና ዞን)',
-    kebele: 'Dida Yabello',
-    diseaseName: 'Foot & Mouth Disease (FMD)',
-    diseaseNameAm: 'የአፍና እግር በሽታ',
-    animalType: 'CATTLE',
-    severity: 'HIGH',
-    confirmedCases: 14,
-    suspectedCases: 28,
-    deaths: 3,
-    mortalities: 3,
-    quarantineStatus: true,
-    status: 'ACTIVE',
-    reportedBy: 'Dr. Tadesse Gemechu (Zonal Vet Officer)',
-    reporterPhone: '+251911445566',
-    notes: 'Blister lesions on tongue and interdigital clefts observed. Livestock movement corridor closed.',
-    coordinates: { lat: 4.8833, lng: 38.0833 },
-    createdAt: new Date(Date.now() - 36 * 3600 * 1000).toISOString(),
-    reportedAt: new Date(Date.now() - 36 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'outbreak_afar_002',
-    woredaId: 'woreda_awash_01',
-    woredaName: 'Awash Fentale (Afar)',
-    woredaNameAm: 'አዋሽ ፈንታሌ (አፋር)',
-    kebele: 'Doho Hot Springs Area',
-    diseaseName: 'Contagious Caprine Pleuropneumonia (CCPP)',
-    diseaseNameAm: 'የፍየል ሳንባ ነቀርሳ',
-    animalType: 'GOAT',
-    severity: 'CRITICAL',
-    confirmedCases: 22,
-    suspectedCases: 45,
-    deaths: 8,
-    mortalities: 8,
-    quarantineStatus: true,
-    status: 'ACTIVE',
-    reportedBy: 'Fatuma Mohammed (DA Livestock)',
-    reporterPhone: '+251922334455',
-    notes: 'Severe respiratory distress, nasal discharge in pastoral goat herds. Antibiotic ring treatment deployed.',
-    coordinates: { lat: 9.1667, lng: 40.0333 },
-    createdAt: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
-    reportedAt: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'outbreak_adama_003',
-    woredaId: 'woreda_adama_01',
-    woredaName: 'Adama Zuria (East Shewa)',
-    woredaNameAm: 'አዳማ ዙሪያ (ምሥራቅ ሸዋ)',
-    kebele: 'Boku Shenkora',
-    diseaseName: 'Anthrax (Bovine)',
-    diseaseNameAm: 'አንትራክስ (የከብት ቁስለት)',
-    animalType: 'CATTLE',
-    severity: 'CRITICAL',
-    confirmedCases: 4,
-    suspectedCases: 7,
-    deaths: 4,
-    mortalities: 4,
-    quarantineStatus: true,
-    status: 'ACTIVE',
-    reportedBy: 'Ato Bekele Desta (Field Inspector)',
-    reporterPhone: '+251912998877',
-    notes: 'Sudden death without rigor mortis. Carcasses secured and buried with unslaked lime. Vaccination scheduled.',
-    coordinates: { lat: 8.5400, lng: 39.2700 },
-    createdAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
-    reportedAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'outbreak_somali_004',
-    woredaId: 'woreda_shinile_01',
-    woredaName: 'Shinile (Sitti Zone)',
-    woredaNameAm: 'ሽኒሌ (ሲቲ ዞን)',
-    kebele: 'Biki Pastoral Station',
-    diseaseName: 'Camel Pox & Respiratory Complex',
-    diseaseNameAm: 'የግመል ፈንጣጣ',
-    animalType: 'CAMEL',
-    severity: 'MODERATE',
-    confirmedCases: 8,
-    suspectedCases: 19,
-    deaths: 1,
-    mortalities: 1,
-    quarantineStatus: false,
-    status: 'ACTIVE',
-    reportedBy: 'Ahmed Nur (Pastoral Extensionist)',
-    reporterPhone: '+251933556677',
-    notes: 'Skin papules and eyelid edema in young camels. Symptomatic supportive fluid therapy given.',
-    coordinates: { lat: 9.6833, lng: 41.8500 },
-    createdAt: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
-    reportedAt: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'outbreak_bishoftu_005',
-    woredaId: 'woreda_adaa_01',
-    woredaName: 'Ada\'a (Bishoftu Poultry Corridor)',
-    woredaNameAm: 'አዳዓ (ቢሾፍቱ)',
-    kebele: 'Babogaya Farm Belt',
-    diseaseName: 'Newcastle Disease',
-    diseaseNameAm: 'የዶሮ ቸነፈር (ኒውካስል)',
-    animalType: 'POULTRY',
-    severity: 'HIGH',
-    confirmedCases: 85,
-    suspectedCases: 210,
-    deaths: 48,
-    mortalities: 48,
-    quarantineStatus: true,
-    status: 'ACTIVE',
-    reportedBy: 'Dr. Selamawit Alemu (Avian Specialist)',
-    reporterPhone: '+251944778899',
-    notes: 'Greenish diarrhea, torticollis, drop in egg production. Emergency thermoresistant I-2 vaccine deployment.',
-    coordinates: { lat: 8.7500, lng: 38.9800 },
-    createdAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-    reportedAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-  },
-];
-
-// In-memory vaccination campaigns
-const activeVaccinationCampaigns = [
-  {
-    id: 'camp_fmd_01',
-    title: 'National FMD Ring Vaccination Drive (የአፍና እግር በሽታ ክትባት)',
-    diseaseTarget: 'Foot and Mouth Disease (FMD)',
-    targetSpecies: ['CATTLE', 'SHEEP'],
-    woredaId: 'woreda_yabelo_01',
-    targetCount: 20000,
-    vaccinatedCount: 16450,
-    startDate: new Date(Date.now() - 15 * 86400000).toISOString(),
-    endDate: new Date(Date.now() + 15 * 86400000).toISOString(),
-    status: 'IN_PROGRESS',
-  },
-  {
-    id: 'camp_cbpp_02',
-    title: 'Bovine Pleuropneumonia (CBPP) Barrier Campaign',
-    diseaseTarget: 'Contagious Bovine Pleuropneumonia',
-    targetSpecies: ['CATTLE'],
-    woredaId: 'woreda_adama_01',
-    targetCount: 15000,
-    vaccinatedCount: 12200,
-    startDate: new Date(Date.now() - 10 * 86400000).toISOString(),
-    endDate: new Date(Date.now() + 20 * 86400000).toISOString(),
-    status: 'IN_PROGRESS',
-  },
-  {
-    id: 'camp_ppr_03',
-    title: 'Afar & Somali Lowlands PPR Eradication Blitz',
-    diseaseTarget: 'Peste des Petits Ruminants (PPR)',
-    targetSpecies: ['GOAT', 'SHEEP'],
-    woredaId: 'woreda_awash_01',
-    targetCount: 35000,
-    vaccinatedCount: 34800,
-    startDate: new Date(Date.now() - 30 * 86400000).toISOString(),
-    endDate: new Date(Date.now() - 2 * 86400000).toISOString(),
-    status: 'COMPLETED',
-  },
-  {
-    id: 'camp_anthrax_04',
-    title: 'Bovine & Equine Spore Vaccine Campaign (አንትራክስ ክትባት)',
-    diseaseTarget: 'Anthrax (Bacillus anthracis)',
-    targetSpecies: ['CATTLE', 'EQUINE'],
-    woredaId: 'woreda_adaa_01',
-    targetCount: 12000,
-    vaccinatedCount: 4200,
-    startDate: new Date(Date.now() - 3 * 86400000).toISOString(),
-    endDate: new Date(Date.now() + 25 * 86400000).toISOString(),
-    status: 'IN_PROGRESS',
-  },
-];
 
 async function reportOutbreak({
   woredaId,
@@ -235,45 +84,44 @@ async function reportOutbreak({
   latitude,
   longitude,
 }) {
-  const coords = await getWoredaCoordinates(woredaId);
+  const woreda = await resolveValidWoreda(woredaId);
   const diseaseInfo = diseaseId ? getDiseaseById(diseaseId) : null;
   const resolvedDiseaseName = diseaseName || (diseaseInfo ? diseaseInfo.nameEn : 'Unknown Disease');
   const resolvedSeverity = severity || (diseaseInfo ? diseaseInfo.severity : 'MODERATE');
 
-  const outbreak = {
-    id: `outbreak_${woredaId || 'field'}_${Date.now()}`,
-    woredaId: coords.id || woredaId || 'woreda_adama_01',
-    woredaName: coords.nameEn || 'Woreda Field Area',
-    woredaNameAm: coords.nameAm || 'የወረዳ መስክ',
-    kebeleId: kebeleId || null,
-    kebele: kebele || null,
-    diseaseName: resolvedDiseaseName,
-    diseaseId: diseaseId || null,
-    diseaseCategory: diseaseInfo?.category || 'UNKNOWN',
-    animalType: animalType || 'CATTLE',
-    isZoonotic: diseaseInfo?.isZoonotic || false,
-    isNotifiable: diseaseInfo?.isNotifiable || false,
-    confirmedCases: Number(confirmedCases) || 0,
-    suspectedCases: Number(suspectedCases) || 1,
-    deaths: Number(deaths ?? mortalities) || 0,
-    mortalities: Number(mortalities ?? deaths) || 0,
-    mortalityRate: (Number(confirmedCases) || 1) > 0
-      ? Math.round((Number(deaths ?? mortalities) || 0) / (Number(confirmedCases) || 1) * 100)
-      : 0,
-    severity: resolvedSeverity,
-    quarantineRecommended: resolvedSeverity === 'CRITICAL' || resolvedSeverity === 'HIGH',
-    quarantineStatus: Boolean(quarantineStatus),
-    quarantineRadiusKm: diseaseInfo?.quarantineRadiusKm || 5,
-    status: 'ACTIVE',
-    coordinates: {
-      lat: latitude || coords.lat,
-      lng: longitude || coords.lng,
+  const createdRecord = await prisma.animalDiseaseOutbreak.create({
+    data: {
+      woredaId: woreda ? woreda.id : (woredaId || 'woreda_adama_01'),
+      kebeleId: kebeleId || null,
+      diseaseName: resolvedDiseaseName,
+      diseaseId: diseaseId || null,
+      animalType: animalType || 'CATTLE',
+      confirmedCases: Number(confirmedCases) || 0,
+      suspectedCases: Number(suspectedCases) || 1,
+      deaths: Number(deaths ?? mortalities) || 0,
+      severity: resolvedSeverity,
+      status: 'ACTIVE',
+      latitude: latitude ?? (woreda?.centerLat ?? 8.54),
+      longitude: longitude ?? (woreda?.centerLng ?? 39.27),
+      reportedBy: reportedBy || 'Field Officer',
+      notes: notes || (kebele ? `Reported from Kebele: ${kebele}` : null),
     },
-    reportedBy: reportedBy || 'Field Officer',
-    reporterPhone: reporterPhone || null,
-    notes: notes || null,
-    createdAt: new Date().toISOString(),
-    reportedAt: new Date().toISOString(),
+    include: {
+      woreda: { select: { id: true, nameEn: true, nameAm: true, centerLat: true, centerLng: true } },
+    },
+  });
+
+  logger.info(`[AnimalHealth] Outbreak reported: ${createdRecord.diseaseName} in woreda ${woreda?.nameEn || woredaId} (${createdRecord.suspectedCases} suspected cases)`);
+
+  return {
+    ...createdRecord,
+    woredaName: createdRecord.woreda?.nameEn || createdRecord.woredaId,
+    woredaNameAm: createdRecord.woreda?.nameAm || createdRecord.woreda?.nameEn || createdRecord.woredaId,
+    coordinates: {
+      lat: createdRecord.latitude,
+      lng: createdRecord.longitude,
+    },
+    mortalities: createdRecord.deaths,
     diseaseInfo: diseaseInfo ? {
       symptomsEn: diseaseInfo.symptomsEn,
       symptomsAm: diseaseInfo.symptomsAm,
@@ -283,81 +131,66 @@ async function reportOutbreak({
       preventionAm: diseaseInfo.preventionAm,
     } : null,
   };
-
-  // Safe database persist if model exists
-  try {
-    if (prisma.animalDiseaseOutbreak) {
-      const createdRecord = await prisma.animalDiseaseOutbreak.create({
-        data: {
-          woredaId: outbreak.woredaId,
-          kebeleId: outbreak.kebeleId,
-          diseaseName: outbreak.diseaseName,
-          diseaseId: outbreak.diseaseId,
-          animalType: outbreak.animalType,
-          confirmedCases: outbreak.confirmedCases,
-          suspectedCases: outbreak.suspectedCases,
-          deaths: outbreak.deaths,
-          severity: outbreak.severity,
-          status: 'ACTIVE',
-          latitude: outbreak.coordinates.lat,
-          longitude: outbreak.coordinates.lng,
-          reportedBy: outbreak.reportedBy,
-          notes: outbreak.notes,
-        },
-      });
-      outbreak.id = createdRecord.id;
-    }
-  } catch (dbErr) {
-    logger.warn(`[AnimalHealth] Outbreak DB persist notice: ${dbErr.message}`);
-  }
-
-  // Prepend to resilient in-memory store so it is immediately visible
-  inMemoryOutbreaks.unshift(outbreak);
-  logger.info(`[AnimalHealth] Outbreak reported: ${outbreak.diseaseName} in ${outbreak.woredaName} (${outbreak.suspectedCases} suspected cases)`);
-
-  return outbreak;
 }
 
 async function getOutbreaks({ woredaId, zoneId, regionId, status = 'ACTIVE', animalType, limit = 50 } = {}) {
-  try {
-    if (prisma.animalDiseaseOutbreak) {
-      const where = {};
-      if (status) where.status = status;
-      if (woredaId) where.woredaId = woredaId;
-      if (animalType) where.animalType = animalType;
-      if (zoneId) where.woreda = { zoneId };
-      if (regionId) where.woreda = { zone: { regionId } };
+  const where = {};
+  if (status && status !== 'ALL') where.status = status;
+  if (woredaId) where.woredaId = woredaId;
+  if (animalType) where.animalType = animalType;
+  if (zoneId) where.woreda = { zoneId };
+  if (regionId) where.woreda = { zone: { regionId } };
 
-      const dbOutbreaks = await prisma.animalDiseaseOutbreak.findMany({
-        where,
-        orderBy: { reportedAt: 'desc' },
-        take: Number(limit) || 50,
-        include: {
-          woreda: { select: { id: true, nameEn: true, nameAm: true } },
-        },
-      });
+  const dbOutbreaks = await prisma.animalDiseaseOutbreak.findMany({
+    where,
+    orderBy: { reportedAt: 'desc' },
+    take: Number(limit) || 50,
+    include: {
+      woreda: { select: { id: true, nameEn: true, nameAm: true, centerLat: true, centerLng: true } },
+    },
+  });
 
-      if (dbOutbreaks && dbOutbreaks.length > 0) {
-        return dbOutbreaks;
-      }
-    }
-  } catch (_err) {
-    logger.warn(`[AnimalHealth] Outbreaks query notice: fallback to in-memory store`);
-  }
+  return (dbOutbreaks || []).map((o) => ({
+    ...o,
+    woredaName: o.woreda?.nameEn || o.woredaId,
+    woredaNameAm: o.woreda?.nameAm || o.woreda?.nameEn || o.woredaId,
+    coordinates: {
+      lat: o.latitude ?? o.woreda?.centerLat ?? 8.54,
+      lng: o.longitude ?? o.woreda?.centerLng ?? 39.27,
+    },
+    mortalities: o.deaths,
+  }));
+}
 
-  // Filter in-memory resilient dataset
-  let filtered = [...inMemoryOutbreaks];
-  if (status) {
-    filtered = filtered.filter((o) => o.status.toUpperCase() === status.toUpperCase());
-  }
-  if (woredaId) {
-    filtered = filtered.filter((o) => o.woredaId === woredaId);
-  }
-  if (animalType) {
-    filtered = filtered.filter((o) => o.animalType.toUpperCase() === animalType.toUpperCase());
-  }
+async function getOutbreakById(id) {
+  const outbreak = await prisma.animalDiseaseOutbreak.findUnique({
+    where: { id },
+    include: {
+      woreda: { select: { id: true, nameEn: true, nameAm: true, centerLat: true, centerLng: true } },
+    },
+  });
 
-  return filtered.slice(0, Number(limit) || 50);
+  if (!outbreak) return null;
+
+  const diseaseInfo = outbreak.diseaseId ? getDiseaseById(outbreak.diseaseId) : null;
+  return {
+    ...outbreak,
+    woredaName: outbreak.woreda?.nameEn || outbreak.woredaId,
+    woredaNameAm: outbreak.woreda?.nameAm || outbreak.woreda?.nameEn || outbreak.woredaId,
+    coordinates: {
+      lat: outbreak.latitude ?? outbreak.woreda?.centerLat ?? 8.54,
+      lng: outbreak.longitude ?? outbreak.woreda?.centerLng ?? 39.27,
+    },
+    mortalities: outbreak.deaths,
+    diseaseInfo: diseaseInfo ? {
+      symptomsEn: diseaseInfo.symptomsEn,
+      symptomsAm: diseaseInfo.symptomsAm,
+      treatmentEn: diseaseInfo.treatmentEn,
+      treatmentAm: diseaseInfo.treatmentAm,
+      preventionEn: diseaseInfo.preventionEn,
+      preventionAm: diseaseInfo.preventionAm,
+    } : null,
+  };
 }
 
 // ─── Livestock Registry ───────────────────────────────────────────────────────
@@ -636,46 +469,168 @@ async function getAnimalHealthRiskAssessment({ woredaId }) {
 }
 
 async function getVaccinationCampaigns({ woredaId, status, limit = 50 } = {}) {
-  try {
-    if (prisma.vaccinationCampaign) {
-      const where = {};
-      if (status) where.status = status;
-      if (woredaId) where.woredaId = woredaId;
-      const dbCamps = await prisma.vaccinationCampaign.findMany({ where, take: Number(limit) || 50 });
-      if (dbCamps && dbCamps.length > 0) return dbCamps;
-    }
-  } catch (_e) {
-    // fallback
-  }
+  const where = {};
+  if (status && status !== 'ALL') where.status = status;
+  if (woredaId) where.woredaId = woredaId;
 
-  let list = [...activeVaccinationCampaigns];
-  if (status) {
-    list = list.filter((c) => c.status.toUpperCase() === status.toUpperCase());
-  }
-  if (woredaId) {
-    list = list.filter((c) => c.woredaId === woredaId);
-  }
-  return list.slice(0, Number(limit) || 50);
+  const dbCamps = await prisma.vaccinationCampaign.findMany({
+    where,
+    orderBy: { startDate: 'desc' },
+    take: Number(limit) || 50,
+    include: {
+      woreda: { select: { id: true, nameEn: true, nameAm: true } },
+    },
+  });
+
+  return (dbCamps || []).map((c) => ({
+    ...c,
+    woredaName: c.woreda?.nameEn || c.woredaId,
+    woredaNameAm: c.woreda?.nameAm || c.woreda?.nameEn || c.woredaId,
+  }));
+}
+
+async function createVaccinationCampaign({
+  woredaId,
+  title,
+  campaignName,
+  diseaseTarget,
+  diseaseTargeted,
+  animalType,
+  targetSpecies,
+  targetCount,
+  targetAnimals,
+  vaccinatedCount,
+  startDate,
+  endDate,
+  status,
+  administeredBy,
+  veterinarianName,
+  notes,
+}) {
+  const woreda = await resolveValidWoreda(woredaId);
+  const resolvedTitle = title || campaignName || 'Vaccination Campaign';
+  const resolvedDisease = diseaseTarget || diseaseTargeted || 'General';
+  const species = targetSpecies && targetSpecies.length > 0
+    ? targetSpecies
+    : (animalType ? [animalType] : ['CATTLE']);
+
+  const campaign = await prisma.vaccinationCampaign.create({
+    data: {
+      woredaId: woreda ? woreda.id : (woredaId || 'woreda_adama_01'),
+      title: resolvedTitle,
+      diseaseTarget: resolvedDisease,
+      animalType: animalType || species[0] || 'CATTLE',
+      targetSpecies: species,
+      targetCount: Number(targetCount || targetAnimals) || 0,
+      vaccinatedCount: Number(vaccinatedCount) || 0,
+      startDate: startDate ? new Date(startDate) : new Date(),
+      endDate: endDate ? new Date(endDate) : null,
+      status: status || 'IN_PROGRESS',
+      administeredBy: administeredBy || veterinarianName || 'Woreda Veterinary Office',
+      notes: notes || null,
+    },
+    include: {
+      woreda: { select: { id: true, nameEn: true, nameAm: true } },
+    },
+  });
+
+  return {
+    ...campaign,
+    woredaName: campaign.woreda?.nameEn || campaign.woredaId,
+    woredaNameAm: campaign.woreda?.nameAm || campaign.woreda?.nameEn || campaign.woredaId,
+  };
 }
 
 async function getPastureMonitoring({ woredaId } = {}) {
-  const sampleWoredas = [
-    { woredaId: woredaId || 'woreda_yabelo_01', woredaName: 'Yabelo (Borana Zone)', biomassIndex: 0.42, vegetationCondition: 'Drier than normal', waterAvailability: 'Scarce / Boreholes Only', droughtStress: true, grazingPressure: 'HIGH', recommendedMove: 'Rotate herds south towards Dirre or supplemental feeding recommended' },
-    { woredaId: 'woreda_adama_01', woredaName: 'Adama Zuria (East Shewa)', biomassIndex: 0.74, vegetationCondition: 'Optimal vegetative flush', waterAvailability: 'Abundant / Awash Basin', droughtStress: false, grazingPressure: 'MODERATE', recommendedMove: 'Normal rotational rangeland schedule' },
-    { woredaId: 'woreda_awash_01', woredaName: 'Awash Fentale (Afar)', biomassIndex: 0.38, vegetationCondition: 'Stressed forage canopy', waterAvailability: 'Riverine Corridor Only', droughtStress: true, grazingPressure: 'VERY HIGH', recommendedMove: 'Prioritize lactating animals for riverine corridor grazing' },
-    { woredaId: 'woreda_shinile_01', woredaName: 'Shinile (Sitti Zone)', biomassIndex: 0.31, vegetationCondition: 'Severe arid rangeland', waterAvailability: 'Critical Shortage', droughtStress: true, grazingPressure: 'CRITICAL', recommendedMove: 'Emergency fodder distribution point activated' },
-    { woredaId: 'woreda_adaa_01', woredaName: 'Ada\'a (Bishoftu)', biomassIndex: 0.81, vegetationCondition: 'Lush mixed crop-livestock pasture', waterAvailability: 'Abundant', droughtStress: false, grazingPressure: 'LOW', recommendedMove: 'Ideal grazing carrying capacity (5 TLU/ha)' },
-  ];
-  return sampleWoredas;
+  const where = woredaId ? { id: woredaId } : {};
+  const woredas = await prisma.woreda.findMany({
+    where,
+    take: woredaId ? 1 : 8,
+    select: {
+      id: true,
+      nameEn: true,
+      nameAm: true,
+      centerLat: true,
+      centerLng: true,
+      zone: { select: { nameEn: true, region: { select: { nameEn: true } } } },
+    },
+  });
+
+  const results = await Promise.all(
+    woredas.map(async (w) => {
+      const lat = w.centerLat || 8.54;
+      const lng = w.centerLng || 39.27;
+      let planetary;
+      try {
+        planetary = await earthEngineConnector.fetchPlanetaryMetrics({ lat, lng, level: 'WOREDA' });
+      } catch (_e) {
+        planetary = { sentinel2Ndvi: 0.55, soilMoisturePct: 45, normalizedDifferenceWaterIndex: 0.12 };
+      }
+
+      const ndvi = planetary.sentinel2Ndvi ?? 0.5;
+      const ndwi = planetary.normalizedDifferenceWaterIndex ?? 0.1;
+
+      let vegetationCondition = 'Normal vegetative canopy';
+      let grazingPressure = 'MODERATE';
+      let recommendedMove = 'Standard rotational grazing';
+      let droughtStress = false;
+
+      if (ndvi < 0.35) {
+        vegetationCondition = 'Severe arid rangeland';
+        grazingPressure = 'CRITICAL';
+        recommendedMove = 'Supplemental feed distribution or migration recommended';
+        droughtStress = true;
+      } else if (ndvi < 0.5) {
+        vegetationCondition = 'Drier than normal';
+        grazingPressure = 'HIGH';
+        recommendedMove = 'Monitor forage depletion; rotate herds to lowland reserves';
+        droughtStress = true;
+      } else if (ndvi >= 0.7) {
+        vegetationCondition = 'Lush optimal pasture';
+        grazingPressure = 'LOW';
+        recommendedMove = 'Ideal grazing carrying capacity (4-6 TLU/ha)';
+        droughtStress = false;
+      }
+
+      let waterAvailability = 'Moderate / Seasonal streams';
+      if (ndwi > 0.15) {
+        waterAvailability = 'Abundant / Surface water present';
+      } else if (ndwi < 0.0) {
+        waterAvailability = 'Scarce / Boreholes only';
+      }
+
+      const zoneName = w.zone?.nameEn ? ` (${w.zone.nameEn})` : '';
+
+      return {
+        woredaId: w.id,
+        woredaName: `${w.nameEn}${zoneName}`,
+        woredaNameAm: w.nameAm,
+        biomassIndex: Math.round(ndvi * 100) / 100,
+        vegetationCondition,
+        waterAvailability,
+        droughtStress,
+        grazingPressure,
+        recommendedMove,
+        coordinates: { lat, lng },
+      };
+    })
+  );
+
+  return results;
 }
 
 async function getHealthStats({ woredaId } = {}) {
-  const outbreaks = await getOutbreaks({ woredaId });
+  const outbreaks = await getOutbreaks({ woredaId, status: 'ALL' });
   const campaigns = await getVaccinationCampaigns({ woredaId });
   const activeOutbreaksCount = outbreaks.filter((o) => o.status === 'ACTIVE').length;
   const criticalCasesCount = outbreaks.filter((o) => ['HIGH', 'CRITICAL'].includes(o.severity?.toUpperCase())).length;
   const totalAffectedLivestock = outbreaks.reduce((acc, o) => acc + (o.suspectedCases || 0), 0);
   const totalVaccinatedCount = campaigns.reduce((acc, c) => acc + (c.vaccinatedCount || 0), 0);
+
+  const pastureMonitoring = await getPastureMonitoring({ woredaId });
+  const avgBiomass = pastureMonitoring.length > 0
+    ? Math.round((pastureMonitoring.reduce((sum, p) => sum + (p.biomassIndex || 0.5), 0) / pastureMonitoring.length) * 100) / 100
+    : 0.55;
 
   return {
     activeOutbreaksCount,
@@ -683,8 +638,8 @@ async function getHealthStats({ woredaId } = {}) {
     totalAffectedLivestock,
     activeVaccinationCampaignsCount: campaigns.filter((c) => c.status === 'IN_PROGRESS').length,
     totalVaccinatedCount,
-    pastureConditionIndex: 0.68,
-    overallRiskLevel: criticalCasesCount > 2 ? 'CRITICAL' : (activeOutbreaksCount > 2 ? 'HIGH' : 'MODERATE'),
+    pastureConditionIndex: avgBiomass,
+    overallRiskLevel: criticalCasesCount > 2 ? 'CRITICAL' : (activeOutbreaksCount > 2 ? 'HIGH' : (activeOutbreaksCount > 0 ? 'MODERATE' : 'LOW')),
     lastUpdated: new Date().toISOString(),
   };
 }
@@ -696,6 +651,7 @@ module.exports = {
   // Outbreak Tracking
   reportOutbreak,
   getOutbreaks,
+  getOutbreakById,
   // Livestock Registry
   registerLivestock,
   getLivestockByWoreda,
@@ -703,6 +659,7 @@ module.exports = {
   recordVaccination,
   getVaccinationStatus,
   getVaccinationCampaigns,
+  createVaccinationCampaign,
   // Pasture & Forage
   getPastureCondition,
   getPastureMonitoring,
