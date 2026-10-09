@@ -26,7 +26,20 @@ async function authenticate(req, res, next) {
           error: { message: 'Invalid API key', code: 'UNAUTHORIZED' },
         });
       }
-      req.user = { id: 'usr_master_admin', email: 'admin@ethiofarm.et', role: 'ADMIN', fullName: 'Master Administrator' };
+      const { prisma } = require('../config/db');
+      const adminUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+      if (!adminUser) {
+        return res.status(403).json({
+          success: false,
+          error: { message: 'No registered Super Administrator account in system', code: 'FORBIDDEN' },
+        });
+      }
+      req.user = {
+        id: adminUser.id,
+        email: adminUser.email,
+        role: 'ADMIN',
+        fullName: adminUser.fullName,
+      };
       return next();
     }
 

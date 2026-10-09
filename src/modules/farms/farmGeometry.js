@@ -13,13 +13,48 @@ function createHttpError(message, statusCode = 400) {
   return error;
 }
 
+function generateBoundingPolygon(lat, lng, hectares = 1.0) {
+  const numLat = Number(lat);
+  const numLng = Number(lng);
+  const ha = Number(hectares) > 0 ? Number(hectares) : 1.0;
+  const delta = (Math.sqrt(ha * 10000) / 111320) / 2;
+  return {
+    type: 'Polygon',
+    coordinates: [[
+      [Number((numLng - delta).toFixed(6)), Number((numLat - delta).toFixed(6))],
+      [Number((numLng + delta).toFixed(6)), Number((numLat - delta).toFixed(6))],
+      [Number((numLng + delta).toFixed(6)), Number((numLat + delta).toFixed(6))],
+      [Number((numLng - delta).toFixed(6)), Number((numLat + delta).toFixed(6))],
+      [Number((numLng - delta).toFixed(6)), Number((numLat - delta).toFixed(6))],
+    ]],
+  };
+}
+
 /**
  * Validate that a value is a well-formed GeoJSON Polygon or MultiPolygon geometry or Feature.
  * Returns a turf Feature on success; throws an HTTP-ready error otherwise.
  */
-function asPolygon(geojson, label) {
-  if (!geojson || typeof geojson !== 'object') {
+function asPolygon(rawGeojson, label) {
+  if (!rawGeojson) {
     throw createHttpError(`${label} must be a valid GeoJSON object`);
+  }
+
+  let geojson = rawGeojson;
+  if (typeof geojson === 'string') {
+    try {
+      geojson = JSON.parse(geojson);
+    } catch (err) {
+      throw createHttpError(`${label} contains invalid JSON string: ${err.message}`);
+    }
+  }
+
+  if (typeof geojson !== 'object' || geojson === null) {
+    throw createHttpError(`${label} must be a valid GeoJSON object`);
+  }
+
+  // Unwrap FeatureCollection
+  if (geojson.type === 'FeatureCollection' && Array.isArray(geojson.features) && geojson.features.length > 0) {
+    geojson = geojson.features[0];
   }
 
   // Unwrap Feature to bare geometry
@@ -36,9 +71,15 @@ function asPolygon(geojson, label) {
     }
   }
 
-  const rings = geometry.coordinates;
+  let rings = geometry.coordinates;
   if (rings.length === 0) {
     throw createHttpError(`${label} has no coordinate rings`);
+  }
+
+  // Auto-wrap flat array of coordinates [[lng, lat], ...] into [[[lng, lat], ...]]
+  if (Array.isArray(rings) && rings.length > 0 && Array.isArray(rings[0]) && typeof rings[0][0] === 'number') {
+    rings = [rings];
+    geometry.coordinates = rings;
   }
 
   // Validate each ring (outer + any holes)
@@ -191,6 +232,8 @@ module.exports = {
   assertContainedByWoreda,
   createHttpError,
   validateFarmPolygon,
+  asPolygon,
+  generateBoundingPolygon,
   getBBox,
   bboxOverlap,
 };

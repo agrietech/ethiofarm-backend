@@ -297,27 +297,17 @@ async function handleAdminLogin(req, res) {
         const { prisma } = require('../../config/db');
         const logger = require('../../utils/logger');
 
-        const { email, password, consoleKey } = req.body || {};
-        const validKeys = env.getAdminKeys ? env.getAdminKeys() : [
-            ...(process.env.ADMIN_API_KEYS || '').split(','),
-            process.env.ADMIN_CONSOLE_PASSWORD,
-            process.env.ADMIN_PASSWORD,
-            process.env.ADMIN_SECRET,
-            process.env.ADMIN_KEY,
-            process.env.ADMIN_PASS,
-            process.env.ADMIN_TOKEN,
-        ].map(k => (k || '').trim()).filter(Boolean);
-
-        const enteredCandidate = (consoleKey || (!email && password ? password : '')).trim();
-        const rawPassword = (password || '').trim();
+        const { email, password, consoleKey, masterKey } = req.body || {};
+        const validKeys = env.getAdminKeys ? env.getAdminKeys() : [];
         const trimmedEmail = (email || '').trim().toLowerCase();
+        const rawPassword = (password || '').trim();
+        const directCandidate = (consoleKey || masterKey || (!email && password ? password : '')).toString().trim();
 
-        // 1. Master Console Key / Environment-Configured Admin Password Authentication
-        // Matches whether entered in the Master Key tab or as the password on the Admin Account tab
-        const isMasterKeyMatch = (enteredCandidate && validKeys.includes(enteredCandidate)) ||
-                                (rawPassword && validKeys.includes(rawPassword));
+        const isMasterKeyDirect = directCandidate && validKeys.includes(directCandidate);
+        const isPasswordMasterKey = rawPassword && validKeys.includes(rawPassword);
 
-        if (isMasterKeyMatch) {
+        // 1. Render Environment Master Key Authentication
+        if (isMasterKeyDirect || (trimmedEmail && isPasswordMasterKey)) {
             let targetUser = null;
             if (trimmedEmail) {
                 targetUser = await prisma.user.findFirst({
@@ -332,17 +322,27 @@ async function handleAdminLogin(req, res) {
 
             if (!targetUser) {
                 targetUser = await prisma.user.findFirst({
-                    where: {
-                        OR: [
-                            { email: 'abraham.tiruneh7@gmail.com' },
-                            { email: 'admin@ethiofarm.et' },
-                            { role: 'ADMIN' },
-                        ],
+                    where: { role: 'ADMIN' },
+                });
+            }
+
+            if (!targetUser) {
+                const defaultEmail = (env.ADMIN_EMAIL || process.env.ADMIN_EMAIL || 'admin@ethiofarm.et').toLowerCase();
+                const keyToHash = rawPassword || directCandidate || 'Admin123!';
+                const hash = await bcrypt.hash(keyToHash, 10);
+                targetUser = await prisma.user.create({
+                    data: {
+                        email: defaultEmail,
+                        fullName: 'National Super Administrator',
+                        role: 'ADMIN',
+                        passwordHash: hash,
+                        isEmailVerified: true,
+                        preferredLang: 'en',
                     },
                 });
             }
 
-            // Sync user password hash in DB if account exists so standard DB logins also work
+            // Sync user password hash in DB if password provided
             if (targetUser && rawPassword) {
                 try {
                     const newHash = await bcrypt.hash(rawPassword, 10);
@@ -354,109 +354,105 @@ async function handleAdminLogin(req, res) {
             }
 
             const tokenPayload = {
-                id: targetUser ? targetUser.id : 'usr_master_admin',
-                email: targetUser ? targetUser.email : (trimmedEmail || env.ADMIN_EMAIL || 'admin@ethiofarm.et'),
+                id: targetUser.id,
+                email: targetUser.email,
                 role: 'ADMIN',
-                fullName: targetUser ? targetUser.fullName : 'Platform Administrator',
-                woredaId: targetUser?.woredaId || null,
+                fullName: targetUser.fullName,
+                woredaId: targetUser.woredaId || null,
             };
 
             const token = jwt.sign(tokenPayload, env.JWT_SECRET, { expiresIn: '24h' });
             const isProd = process.env.NODE_ENV === 'production';
             const secureFlag = isProd ? '; Secure' : '';
             res.setHeader('Set-Cookie', `admin_token=${token}; Path=/admin; HttpOnly; SameSite=Lax; Max-Age=86400${secureFlag}`);
-            logger.info(`[ADMIN_SECURITY] Successful login via Master Key/Password by ${tokenPayload.email}`);
+            logger.info(`[ADMIN_SECURITY] Successful login via Render Master Key by ${tokenPayload.email}`);
 
             if (req.xhr || req.headers.accept?.includes('application/json')) {
-                return res.status(200).json({ success: true, redirect: `/admin/dashboard?token=${encodeURIComponent(token)}`, token, user: tokenPayload });
+                return res.status(200).json({
+                    success: true,
+                    redirect: `/admin/dashboard?token=${encodeURIComponent(token)}`,
+                    token,
+                    user: tokenPayload,
+                });
             }
             return res.redirect(`/admin/dashboard?token=${encodeURIComponent(token)}`);
         }
 
-        // 2. Database Email and Password Authentication
-        if (email && password) {
-            const user = await prisma.user.findFirst({
-                where: {
-                    OR: [
-                        { email: { equals: trimmedEmail, mode: 'insensitive' } },
-                        { phoneNumber: email.trim() },
-                    ],
-                },
-            });
-
-            if (!user) {
-                if (req.xhr || req.headers.accept?.includes('application/json')) {
-                    return res.status(401).json({ success: false, message: 'Invalid administrative credentials' });
-                }
-                return res.redirect('/admin/login?error=Invalid%20credentials');
+        if (!trimmedEmail || !rawPassword) {
+            if (req.xhr || req.headers.accept?.includes('application/json')) {
+                return res.status(400).json({ success: false, message: 'Administrator credentials or Master Security Key required' });
             }
+            return res.redirect('/admin/login?error=Credentials%20required');
+        }
 
-            let isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+        // 2. Strict Database Email/Phone and Password Authentication
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: { equals: trimmedEmail, mode: 'insensitive' } },
+                    { phoneNumber: email.trim() },
+                ],
+            },
+        });
 
-            // Enterprise fallback for primary platform administrators (abraham.tiruneh7@gmail.com / admin@ethiofarm.et)
-            // Accepts Admin@2026!, master console security keys, or env keys, and auto-syncs DB hash
-            if (!isPasswordValid && (user.role === 'ADMIN' || trimmedEmail.includes('abraham') || trimmedEmail.includes('admin@ethiofarm'))) {
-                const emergencyKeys = [
-                    'Admin@2026!',
-                    'agrietech_admin_live_sec_key_2026_98827',
-                    ...validKeys,
-                ];
-                if (emergencyKeys.includes(password.trim())) {
-                    isPasswordValid = true;
-                    try {
-                        const syncedHash = await bcrypt.hash(password.trim(), 10);
-                        await prisma.user.update({
-                            where: { id: user.id },
-                            data: { passwordHash: syncedHash, isEmailVerified: true, role: 'ADMIN' },
-                        });
-                        logger.info(`[ADMIN_SECURITY] Synchronized password hash for ${user.email} in database.`);
-                    } catch (_err) {}
-                }
+        if (!user) {
+            logger.warn(`[ADMIN_SECURITY] Admin login failed: User '${trimmedEmail}' not found in database`);
+            if (req.xhr || req.headers.accept?.includes('application/json')) {
+                return res.status(401).json({ success: false, message: 'Invalid administrative credentials' });
             }
+            return res.redirect('/admin/login?error=Invalid%20credentials');
+        }
 
-            if (!isPasswordValid) {
-                if (req.xhr || req.headers.accept?.includes('application/json')) {
-                    return res.status(401).json({ success: false, message: 'Invalid administrative credentials' });
-                }
-                return res.redirect('/admin/login?error=Invalid%20credentials');
+        const isPasswordValid = await bcrypt.compare(rawPassword, user.passwordHash || '').catch(() => false);
+        if (!isPasswordValid) {
+            logger.warn(`[ADMIN_SECURITY] Admin login failed: Invalid password for '${trimmedEmail}'`);
+            if (req.xhr || req.headers.accept?.includes('application/json')) {
+                return res.status(401).json({ success: false, message: 'Invalid administrative credentials' });
             }
+            return res.redirect('/admin/login?error=Invalid%20credentials');
+        }
 
-            const allowedRoles = ['ADMIN', 'REGIONAL_OFFICER', 'ZONAL_OFFICER', 'WOREDA_OFFICER', 'DEVELOPMENT_AGENT'];
-            if (!allowedRoles.includes(user.role)) {
-                logger.warn(`[ADMIN_SECURITY] Unauthorized admin portal login attempt by non-admin user ${user.id} (${user.role})`);
-                if (req.xhr || req.headers.accept?.includes('application/json')) {
-                    return res.status(403).json({ success: false, message: 'Access denied: Administrative privileges required' });
-                }
-                return res.redirect('/admin/login?error=Access%20denied:%20Administrative%20privileges%20required');
+        // Strict National Super Administrator privilege check
+        if (user.role !== 'ADMIN') {
+            logger.warn(`[ADMIN_SECURITY] Unauthorized admin portal login attempt by non-admin user ${user.id} (${user.role})`);
+            if (req.xhr || req.headers.accept?.includes('application/json')) {
+                return res.status(403).json({ success: false, message: 'Access denied: National Super Administrator privileges required' });
             }
+            return res.redirect('/admin/login?error=Access%20denied:%20National%20Super%20Administrator%20privileges%20required');
+        }
 
-            const token = jwt.sign(
-                {
+        const token = jwt.sign(
+            {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                fullName: user.fullName,
+                woredaId: user.woredaId,
+            },
+            env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        const isProd = process.env.NODE_ENV === 'production';
+        const secureFlag = isProd ? '; Secure' : '';
+        res.setHeader('Set-Cookie', `admin_token=${token}; Path=/admin; HttpOnly; SameSite=Lax; Max-Age=86400${secureFlag}`);
+        logger.info(`[ADMIN_SECURITY] Successful National Super Admin login by ${user.email} (${user.id})`);
+
+        if (req.xhr || req.headers.accept?.includes('application/json')) {
+            return res.status(200).json({
+                success: true,
+                redirect: `/admin/dashboard?token=${encodeURIComponent(token)}`,
+                token,
+                user: {
                     id: user.id,
                     email: user.email,
                     role: user.role,
                     fullName: user.fullName,
                     woredaId: user.woredaId,
                 },
-                env.JWT_SECRET,
-                { expiresIn: '24h' }
-            );
-
-            const isProd = process.env.NODE_ENV === 'production';
-            const secureFlag = isProd ? '; Secure' : '';
-            res.setHeader('Set-Cookie', `admin_token=${token}; Path=/admin; HttpOnly; SameSite=Lax; Max-Age=86400${secureFlag}`);
-            logger.info(`[ADMIN_SECURITY] Successful admin portal login by ${user.email} (${user.role})`);
-
-            if (req.xhr || req.headers.accept?.includes('application/json')) {
-                return res.status(200).json({ success: true, redirect: `/admin/dashboard?token=${encodeURIComponent(token)}`, token, user });
-            }
-            return res.redirect(`/admin/dashboard?token=${encodeURIComponent(token)}`);
+            });
         }
-
-        if (req.xhr || req.headers.accept?.includes('application/json')) {
-            return res.status(400).json({ success: false, message: 'Please provide credentials or a master console key' });
-        }
-        return res.redirect('/admin/login?error=Credentials%20required');
+        return res.redirect(`/admin/dashboard?token=${encodeURIComponent(token)}`);
     } catch (err) {
         if (req.xhr || req.headers.accept?.includes('application/json')) {
             return res.status(500).json({ success: false, message: 'Internal server error during authentication' });
@@ -591,10 +587,11 @@ async function handleAdminResetPassword(req, res) {
         const logger = require('../../utils/logger');
 
         const { email, masterKey, newPassword } = req.body || {};
-        const defaultAdminEmail = (process.env.ADMIN_EMAIL || 'admin@ethiofarm.et').toLowerCase();
-        const trimmedEmail = (email || defaultAdminEmail).trim().toLowerCase();
+        const validKeys = env.getAdminKeys ? env.getAdminKeys() : [];
         const trimmedKey = (masterKey || '').trim();
         const trimmedNewPassword = (newPassword || '').trim();
+        const defaultAdminEmail = (env.ADMIN_EMAIL || process.env.ADMIN_EMAIL || 'admin@ethiofarm.et').toLowerCase();
+        const targetEmail = (email || defaultAdminEmail).trim().toLowerCase();
 
         const isJson = req.xhr || req.headers.accept?.includes('application/json');
 
@@ -603,29 +600,15 @@ async function handleAdminResetPassword(req, res) {
             return res.redirect('/admin/login?error=Password%20must%20be%20at%20least%206%20characters');
         }
 
-        const validKeys = env.getAdminKeys ? env.getAdminKeys() : [
-            ...(process.env.ADMIN_API_KEYS || '').split(','),
-            process.env.ADMIN_CONSOLE_PASSWORD,
-            process.env.ADMIN_PASSWORD,
-            process.env.ADMIN_SECRET,
-            process.env.ADMIN_KEY,
-            process.env.ADMIN_PASS,
-            process.env.ADMIN_TOKEN,
-            'agrietech_admin_live_sec_key_2026_98827',
-            'Admin@2026!',
-        ].map(k => (k || '').trim()).filter(Boolean);
-
         if (!trimmedKey || !validKeys.includes(trimmedKey)) {
-            if (isJson) return res.status(403).json({ success: false, message: 'Invalid Master Security Key / Passcode' });
+            if (isJson) return res.status(403).json({ success: false, message: 'Invalid Master Security Key from Render environment' });
             return res.redirect('/admin/login?error=Invalid%20Master%20Security%20Key');
         }
 
-        // Find or create admin user in database
-        let user = await prisma.user.findFirst({
-            where: { email: { equals: trimmedEmail, mode: 'insensitive' } },
-        });
-
         const newHash = await bcrypt.hash(trimmedNewPassword, 10);
+        let user = await prisma.user.findFirst({
+            where: { email: { equals: targetEmail, mode: 'insensitive' } },
+        });
 
         if (user) {
             user = await prisma.user.update({
@@ -635,8 +618,8 @@ async function handleAdminResetPassword(req, res) {
         } else {
             user = await prisma.user.create({
                 data: {
-                    email: trimmedEmail,
-                    fullName: 'Platform Administrator',
+                    email: targetEmail,
+                    fullName: 'National Super Administrator',
                     passwordHash: newHash,
                     role: 'ADMIN',
                     isEmailVerified: true,
@@ -657,7 +640,7 @@ async function handleAdminResetPassword(req, res) {
         const isProd = process.env.NODE_ENV === 'production';
         const secureFlag = isProd ? '; Secure' : '';
         res.setHeader('Set-Cookie', `admin_token=${token}; Path=/admin; HttpOnly; SameSite=Lax; Max-Age=86400${secureFlag}`);
-        logger.info(`[ADMIN_SECURITY] Password reset and auto-login for ${user.email}`);
+        logger.info(`[ADMIN_SECURITY] Password updated via Render Master Key for ${user.email}`);
 
         if (isJson) {
             return res.status(200).json({
@@ -670,11 +653,10 @@ async function handleAdminResetPassword(req, res) {
         }
         return res.redirect(`/admin/dashboard?token=${encodeURIComponent(token)}`);
     } catch (err) {
-        logger.error(`[ADMIN_SECURITY] Password reset error: ${err.message}`);
         if (req.xhr || req.headers.accept?.includes('application/json')) {
-            return res.status(500).json({ success: false, message: 'Internal error updating admin password' });
+            return res.status(500).json({ success: false, message: 'Internal error updating password' });
         }
-        return res.redirect('/admin/login?error=Internal%20server%20error');
+        return res.redirect('/admin/login?error=Internal%20error');
     }
 }
 

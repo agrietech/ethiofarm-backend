@@ -196,6 +196,7 @@ model Woreda {
   livestockHerds   LivestockHerd[]
   diseaseOutbreaks AnimalDiseaseOutbreak[]
   vaccinationRecords VaccinationRecord[]
+  vaccinationCampaigns VaccinationCampaign[]
   alertCampaigns   AlertCampaign[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -696,6 +697,29 @@ model VaccinationRecord {
   @@index([animalType])
   @@index([campaignDate])
   @@index([vaccineName])
+}
+
+model VaccinationCampaign {
+  id               String            @id @default(uuid())
+  woredaId         String
+  woreda           Woreda            @relation(fields: [woredaId], references: [id], onDelete: Cascade)
+  title            String
+  diseaseTarget    String
+  animalType       String?           // CATTLE, SHEEP, GOAT, POULTRY, CAMEL, EQUINE
+  targetSpecies    String[]          @default([])
+  targetCount      Int               @default(0)
+  vaccinatedCount  Int               @default(0)
+  startDate        DateTime          @default(now())
+  endDate          DateTime?
+  status           String            @default("IN_PROGRESS") // PLANNED, IN_PROGRESS, COMPLETED
+  administeredBy   String?
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([woredaId, status])
+  @@index([diseaseTarget])
+  @@index([startDate])
 }
 
 

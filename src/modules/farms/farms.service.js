@@ -4,7 +4,7 @@ const { ServiceUnavailableError, NotFoundError, ForbiddenError, ConflictError } 
 const centroid = require('@turf/centroid').default || require('@turf/centroid');
 const { getCoord } = require('@turf/invariant');
 const boundariesService = require('../boundaries/boundaries.service');
-const { assertContainedByWoreda, createHttpError, validateFarmPolygon } = require('./farmGeometry');
+const { assertContainedByWoreda, createHttpError, validateFarmPolygon, generateBoundingPolygon } = require('./farmGeometry');
 
 // Ethiopian geographic bounding box (approximate)
 const ETHIOPIA_BOUNDS = { minLat: 3.0, maxLat: 15.5, minLng: 32.5, maxLng: 48.5 };
@@ -18,6 +18,7 @@ async function createFarm({
   primaryCrop,
   areaHectares,
   woredaId,
+  kebeleId,
   polygonGeojson,
   latitude: inputLat,
   longitude: inputLng,
@@ -46,12 +47,16 @@ async function createFarm({
     }
   }
 
-  const finalPolygon = polygonGeojson;
+  let finalPolygon = polygonGeojson;
   if (!finalPolygon) {
-    throw createHttpError('polygonGeojson GIS boundary polygon is strictly required to register a farm plot', 400);
+    if (inputLat !== undefined && inputLat !== null && inputLng !== undefined && inputLng !== null) {
+      finalPolygon = generateBoundingPolygon(inputLat, inputLng, areaHectares || 1.0);
+    } else {
+      throw createHttpError('polygonGeojson GIS boundary polygon is strictly required to register a farm plot', 400);
+    }
   }
 
-  // Step 1 – deep polygon validation (coordinate ranges, closure, kinks)
+  // Step 1 – deep polygon validation (coordinate ranges, closure, kinks, unwrapping)
   const farmPolygon = validateFarmPolygon(finalPolygon);
 
   // Step 2 – derive centroid for the flat lat/lng columns
@@ -59,28 +64,57 @@ async function createFarm({
   const latitude = inputLat !== undefined && inputLat !== null ? Number(inputLat) : derivedLat;
   const longitude = inputLng !== undefined && inputLng !== null ? Number(inputLng) : derivedLng;
 
-  if (!resolvedWoredaId) {
+  if (!resolvedWoredaId && typeof boundariesService.resolveWoredaByCoords === 'function') {
     resolvedWoredaId = await boundariesService.resolveWoredaByCoords(latitude, longitude);
   }
 
   // Step 3 – retrieve woreda and its boundary
-  let woreda = await boundariesService.getWoredaById(resolvedWoredaId);
+  let woreda = typeof boundariesService.getWoredaById === 'function'
+    ? await boundariesService.getWoredaById(resolvedWoredaId)
+    : null;
+  if (!woreda && typeof boundariesService.resolveWoredaByCoords === 'function') {
+    const fallbackWoredaId = await boundariesService.resolveWoredaByCoords(latitude, longitude);
+    if (fallbackWoredaId) {
+      resolvedWoredaId = fallbackWoredaId;
+      woreda = await boundariesService.getWoredaById(resolvedWoredaId);
+    }
+  }
   if (!woreda) {
     throw createHttpError('Selected woreda was not found', 404);
   }
 
-    if (woreda && woreda.geojson) {
-    // Step 4 – spatial containment check
+  if (woreda && woreda.geojson) {
+    // Step 4 – spatial containment check with coordinate fallback
     try {
       assertContainedByWoreda(farmPolygon, woreda.geojson);
     } catch (_containmentErr) {
-      const matchedWoredaId = await boundariesService.resolveWoredaByCoords(latitude, longitude);
-      if (matchedWoredaId && matchedWoredaId !== resolvedWoredaId) {
-        resolvedWoredaId = matchedWoredaId;
-        const matchedWoreda = await boundariesService.getWoredaById(resolvedWoredaId);
-        if (matchedWoreda) woreda = matchedWoreda;
+      if (typeof boundariesService.resolveWoredaByCoords === 'function') {
+        const matchedWoredaId = await boundariesService.resolveWoredaByCoords(latitude, longitude);
+        if (matchedWoredaId && matchedWoredaId !== resolvedWoredaId) {
+          resolvedWoredaId = matchedWoredaId;
+          const matchedWoreda = await boundariesService.getWoredaById(resolvedWoredaId);
+          if (matchedWoreda) woreda = matchedWoreda;
+        }
       }
     }
+  }
+
+  // Step 5 – resolve kebeleId
+  let resolvedKebeleId = kebeleId || null;
+  if (resolvedKebeleId) {
+    try {
+      const kebele = await prisma.kebele.findUnique({ where: { id: resolvedKebeleId } });
+      if (kebele && !resolvedWoredaId && kebele.woredaId) {
+        resolvedWoredaId = kebele.woredaId;
+      } else if (!kebele) {
+        resolvedKebeleId = null;
+      }
+    } catch (_) {
+      resolvedKebeleId = null;
+    }
+  }
+  if (!resolvedKebeleId && latitude && longitude && typeof boundariesService.resolveKebeleByCoords === 'function') {
+    resolvedKebeleId = await boundariesService.resolveKebeleByCoords(latitude, longitude);
   }
 
   if (isConnected()) {
@@ -109,13 +143,32 @@ async function createFarm({
           farmName,
           primaryCrop: primaryCrop || null,
           cropId,
-          areaHectares: areaHectares ?? null,
+          areaHectares: areaHectares ? Number(areaHectares) : null,
           latitude,
           longitude,
           woredaId: resolvedWoredaId,
+          kebeleId: resolvedKebeleId,
           polygonGeojson: farmPolygon.geometry,
           soilType: soilType || null,
           irrigationType: irrigationType || null,
+        },
+        include: {
+          woreda: {
+            select: {
+              id: true,
+              nameEn: true,
+              nameAm: true,
+              zoneId: true,
+            },
+          },
+          kebele: {
+            select: {
+              id: true,
+              nameEn: true,
+              nameAm: true,
+            },
+          },
+          crop: true,
         },
       });
 

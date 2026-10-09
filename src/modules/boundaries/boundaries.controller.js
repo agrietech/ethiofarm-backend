@@ -100,6 +100,15 @@ async function resolveCoordinates(req, res, next) {
   }
 }
 
+async function createKebele(req, res, next) {
+  try {
+    const data = await boundariesService.createKebele(req.body, req.user);
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function updateKebelePolygon(req, res, next) {
   try {
     const { id } = req.params;
@@ -122,6 +131,7 @@ module.exports = {
   getWoredaDetails,
   getKebeles,
   getKebeleDetails,
+  createKebele,
   updateKebelePolygon,
   getHierarchy,
   getNationalSummary,

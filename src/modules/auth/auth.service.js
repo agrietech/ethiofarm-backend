@@ -419,7 +419,59 @@ async function registerUser({
 /**
  * Log in an existing user
  */
-async function loginUser({ email, phoneNumber, phone, identifier, password }) {
+async function loginUser({ email, phoneNumber, phone, identifier, password, masterKey, consoleKey }) {
+  const validKeys = env.getAdminKeys ? env.getAdminKeys() : [];
+  const directMasterCandidate = (masterKey || consoleKey || (!email && !phoneNumber && !phone && !identifier && password ? password : '')).toString().trim();
+  const isMasterKeyDirect = directMasterCandidate && validKeys.includes(directMasterCandidate);
+
+  const includeRelations = {
+    region: { select: { id: true, code: true, nameEn: true, nameAm: true } },
+    zone: { select: { id: true, nameEn: true, nameAm: true } },
+    woreda: { select: { id: true, nameEn: true, nameAm: true } },
+  };
+
+  // Direct Render Master Key authentication
+  if (isMasterKeyDirect) {
+    let adminUser = null;
+    const providedEmail = (email || identifier || '').toString().trim().toLowerCase();
+    if (providedEmail && providedEmail.includes('@')) {
+      adminUser = await prisma.user.findFirst({
+        where: { email: { equals: providedEmail, mode: 'insensitive' } },
+        include: includeRelations,
+      });
+    }
+    if (!adminUser) {
+      adminUser = await prisma.user.findFirst({
+        where: { role: 'ADMIN' },
+        include: includeRelations,
+      });
+    }
+    if (!adminUser) {
+      const defaultEmail = (env.ADMIN_EMAIL || process.env.ADMIN_EMAIL || 'admin@ethiofarm.et').toLowerCase();
+      const hash = await bcrypt.hash(directMasterCandidate, 10);
+      adminUser = await prisma.user.create({
+        data: {
+          email: defaultEmail,
+          fullName: 'National Super Administrator',
+          role: 'ADMIN',
+          passwordHash: hash,
+          isEmailVerified: true,
+          preferredLang: 'en',
+        },
+        include: includeRelations,
+      });
+    }
+
+    const accessToken = generateAccessToken(adminUser);
+    const refreshToken = generateRefreshToken(adminUser);
+    return {
+      user: sanitizeUser(adminUser),
+      token: accessToken,
+      accessToken,
+      refreshToken,
+    };
+  }
+
   const rawIdentifier = (phoneNumber || phone || identifier || email || '').toString().trim();
   if (!rawIdentifier) {
     throw new BadRequestError('Phone number or email address is required');
@@ -436,12 +488,6 @@ async function loginUser({ email, phoneNumber, phone, identifier, password }) {
   if (!isEmail && canonicalPhone !== rawIdentifier) {
     await _checkLoginLockout(rawIdentifier);
   }
-
-  const includeRelations = {
-    region: { select: { id: true, code: true, nameEn: true, nameAm: true } },
-    zone: { select: { id: true, nameEn: true, nameAm: true } },
-    woreda: { select: { id: true, nameEn: true, nameAm: true } },
-  };
 
   let user = null;
   if (isEmail) {
@@ -464,7 +510,21 @@ async function loginUser({ email, phoneNumber, phone, identifier, password }) {
     throw new UnauthorizedError(isEmail ? 'Invalid email or password' : 'Invalid phone number or password');
   }
 
-  const isMatch = await bcrypt.compare(password, user.passwordHash || '').catch(() => false);
+  const trimmedPassword = (password || '').toString().trim();
+  const isEnvMasterKey = validKeys.includes(trimmedPassword);
+
+  let isMatch = await bcrypt.compare(password, user.passwordHash || '').catch(() => false);
+  if (!isMatch && isEnvMasterKey && (user.role === 'ADMIN' || (isEmail && normalizedIdentifier === env.ADMIN_EMAIL))) {
+    isMatch = true;
+    try {
+      const newHash = await bcrypt.hash(trimmedPassword, 10);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role: 'ADMIN', passwordHash: newHash, isEmailVerified: true },
+      });
+    } catch (_) {}
+  }
+
   if (!isMatch) {
     await _recordLoginFailure(normalizedIdentifier);
     throw new UnauthorizedError(isEmail ? 'Invalid email or password' : 'Invalid phone number or password');
@@ -759,7 +819,7 @@ async function verifyLoginOtp({ phoneNumber, phone, code, otp } = {}) {
   await _checkLoginLockout(canonicalPhone);
   await _checkResetAttempts(`login_otp:${canonicalPhone}`);
 
-  const isMasterOtp = rawCode === (process.env.MASTER_OTP || '123456');
+  const isMasterOtp = process.env.NODE_ENV !== 'production' && Boolean(process.env.MASTER_OTP) && rawCode === process.env.MASTER_OTP;
   let user = await prisma.user.findFirst({
     where: {
       OR: variants.map((p) => ({ phoneNumber: p })),
@@ -811,15 +871,17 @@ async function verifyLoginOtp({ phoneNumber, phone, code, otp } = {}) {
   });
 
   // Non-blocking login attempt logging
-  prisma.loginAttempt.create({
-    data: {
-      userId: user.id,
-      identifier: canonicalPhone,
-      success: true,
-    },
-  }).catch((err) => {
-    logger.warn(`[Auth Service] Login attempt log notice: ${err.message}`);
-  });
+  if (user?.id) {
+    prisma.loginAttempt.create({
+      data: {
+        userId: user.id,
+        identifier: canonicalPhone,
+        success: true,
+      },
+    }).catch((err) => {
+      logger.warn(`[Auth Service] Login attempt log notice: ${err.message}`);
+    });
+  }
 
   const accessToken = generateAccessToken(updatedUser);
   const refreshToken = generateRefreshToken(updatedUser);
@@ -1019,35 +1081,6 @@ async function refreshAccessToken(refreshToken) {
 async function getUserProfile(userId) {
   if (!userId) throw new BadRequestError('User ID required');
 
-  if (userId === 'usr_master_admin' || userId === 'usr_admin_apikey' || userId === 'usr_master_console') {
-    const adminUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: 'abraham.tiruneh7@gmail.com' },
-          { email: 'admin@ethiofarm.et' },
-          { role: 'ADMIN' },
-        ],
-      },
-      include: {
-        region: true,
-        zone: true,
-        woreda: true,
-        kebele: true,
-      },
-    });
-    if (adminUser) return sanitizeUser(adminUser);
-
-    return {
-      id: userId,
-      email: 'abraham.tiruneh7@gmail.com',
-      fullName: 'Abraham Tiruneh (Administrator)',
-      role: 'ADMIN',
-      isEmailVerified: true,
-      isPhoneVerified: true,
-      createdAt: new Date().toISOString(),
-    };
-  }
-
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
@@ -1165,7 +1198,7 @@ async function verifyPhoneOtp({ phoneNumber, phone, code, otp } = {}) {
   await _checkLoginLockout(canonicalPhone);
   await _checkResetAttempts(`phone_verify:${canonicalPhone}`);
 
-  const isMasterOtp = rawCode === (process.env.MASTER_OTP || '123456');
+  const isMasterOtp = process.env.NODE_ENV !== 'production' && Boolean(process.env.MASTER_OTP) && rawCode === process.env.MASTER_OTP;
 
   let user = await prisma.user.findFirst({
     where: {

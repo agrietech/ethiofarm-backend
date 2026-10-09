@@ -18,11 +18,57 @@ router.get('/woredas/:id', optionalAuthenticate, setCacheHeaders(3600), controll
 router.get('/kebeles', optionalAuthenticate, setCacheHeaders(3600), controller.getKebeles);
 router.get('/kebeles/:id', optionalAuthenticate, setCacheHeaders(3600), controller.getKebeleDetails);
 
-// Development Agent / Admin endpoint to insert/update Kebele location and polygon boundary in GIS
+// Register a new Kebele boundary with polygon (Development Agents, Officers, and Admin)
+router.post(
+  '/kebeles',
+  authenticate,
+  authorize('DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'),
+  [
+    body('nameEn')
+      .trim()
+      .notEmpty()
+      .withMessage('nameEn (Kebele name) is required')
+      .isLength({ max: 200 })
+      .withMessage('nameEn must be at most 200 characters'),
+    body('woredaId')
+      .optional()
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('woredaId must be a non-empty string'),
+    body('centerLat')
+      .optional()
+      .isFloat()
+      .withMessage('centerLat must be a valid number'),
+    body('centerLng')
+      .optional()
+      .isFloat()
+      .withMessage('centerLng must be a valid number'),
+    body('polygonGeojson')
+      .optional()
+      .custom((value) => {
+        if (!value) return true;
+        if (typeof value === 'string') {
+          try {
+            JSON.parse(value);
+            return true;
+          } catch {
+            throw new Error('polygonGeojson must be valid JSON');
+          }
+        }
+        if (typeof value === 'object' && value !== null) return true;
+        throw new Error('polygonGeojson must be a GeoJSON object or JSON string');
+      }),
+  ],
+  validate,
+  controller.createKebele
+);
+
+// Development Agent / Officers / Admin endpoint to insert/update Kebele location and polygon boundary in GIS
 router.put(
   '/kebeles/:id/polygon',
   authenticate,
-  authorize('DEVELOPMENT_AGENT', 'ADMIN'),
+  authorize('DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'),
   [
     body('polygonGeojson')
       .notEmpty()

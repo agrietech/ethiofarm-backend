@@ -56,6 +56,21 @@ async function getOutbreaks(req, res, next) {
   }
 }
 
+// GET /api/v1/animal-health/outbreaks/:id — Single outbreak details
+async function getOutbreakById(req, res, next) {
+  try {
+    const { id } = req.params;
+    const outbreak = await animalHealthService.getOutbreakById(id);
+    if (!outbreak) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: `Outbreak '${id}' not found` } });
+    }
+    res.json({ success: true, data: outbreak });
+  } catch (err) {
+    logger.error(`[AnimalHealthController] Outbreak detail error: ${err.message}`);
+    next(err);
+  }
+}
+
 // POST /api/v1/animal-health/livestock — Register livestock herd
 async function registerLivestock(req, res, next) {
   try {
@@ -150,6 +165,17 @@ async function getCampaigns(req, res, next) {
   }
 }
 
+// POST /api/v1/animal-health/campaigns — Launch new vaccination campaign
+async function createCampaign(req, res, next) {
+  try {
+    const campaign = await animalHealthService.createVaccinationCampaign(req.body);
+    res.status(201).json({ success: true, data: campaign });
+  } catch (err) {
+    logger.error(`[AnimalHealthController] Campaign creation error: ${err.message}`);
+    next(err);
+  }
+}
+
 // GET /api/v1/animal-health/pasture — Multi-woreda pasture monitoring
 async function getPastureMonitoring(req, res, next) {
   try {
@@ -186,12 +212,15 @@ module.exports = {
   getDiseaseDetails,
   reportOutbreak,
   getOutbreaks,
+  getOutbreakById,
   registerLivestock,
   getLivestock,
   recordVaccination,
   getVaccinationStatus,
   getVaccinationCampaigns: getCampaigns,
   getCampaigns,
+  createCampaign,
+  createVaccinationCampaign: createCampaign,
   getPastureCondition,
   getPastureMonitoring,
   getRiskAssessment,

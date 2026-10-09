@@ -173,4 +173,50 @@ describe('Boundaries Module API Suite', () => {
 
     expect(res.status).toBe(400);
   });
+
+  it('POST /api/v1/boundaries/kebeles - should allow expert/DA to register a new Kebele with GIS boundary', async () => {
+    const validPolygon = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [39.26, 8.53],
+          [39.28, 8.53],
+          [39.28, 8.55],
+          [39.26, 8.55],
+          [39.26, 8.53],
+        ],
+      ],
+    };
+
+    const res = await request(app)
+      .post('/api/v1/boundaries/kebeles')
+      .set('Authorization', `Bearer ${daToken}`)
+      .send({
+        nameEn: 'Wonji Shoa Model Kebele',
+        woredaId: 'woreda_adama_01',
+        polygonGeojson: validPolygon,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.nameEn).toBe('Wonji Shoa Model Kebele');
+    expect(res.body.data.woredaId).toBe('woreda_adama_01');
+
+    if (res.body.data.id) {
+      await prisma.kebele.deleteMany({ where: { id: res.body.data.id } }).catch(() => {});
+    }
+  });
+
+  it('POST /api/v1/boundaries/kebeles - should forbid Farmer from registering a Kebele (403 Forbidden)', async () => {
+    const res = await request(app)
+      .post('/api/v1/boundaries/kebeles')
+      .set('Authorization', `Bearer ${farmerToken}`)
+      .send({
+        nameEn: 'Unauthorized Farmer Kebele',
+        woredaId: 'woreda_adama_01',
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+  });
 });
