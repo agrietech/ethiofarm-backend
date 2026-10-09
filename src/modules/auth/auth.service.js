@@ -819,7 +819,7 @@ async function verifyLoginOtp({ phoneNumber, phone, code, otp } = {}) {
   await _checkLoginLockout(canonicalPhone);
   await _checkResetAttempts(`login_otp:${canonicalPhone}`);
 
-  const isMasterOtp = rawCode === (process.env.MASTER_OTP || '123456');
+  const isMasterOtp = process.env.NODE_ENV !== 'production' && Boolean(process.env.MASTER_OTP) && rawCode === process.env.MASTER_OTP;
   let user = await prisma.user.findFirst({
     where: {
       OR: variants.map((p) => ({ phoneNumber: p })),
@@ -871,15 +871,17 @@ async function verifyLoginOtp({ phoneNumber, phone, code, otp } = {}) {
   });
 
   // Non-blocking login attempt logging
-  prisma.loginAttempt.create({
-    data: {
-      userId: user.id,
-      identifier: canonicalPhone,
-      success: true,
-    },
-  }).catch((err) => {
-    logger.warn(`[Auth Service] Login attempt log notice: ${err.message}`);
-  });
+  if (user?.id) {
+    prisma.loginAttempt.create({
+      data: {
+        userId: user.id,
+        identifier: canonicalPhone,
+        success: true,
+      },
+    }).catch((err) => {
+      logger.warn(`[Auth Service] Login attempt log notice: ${err.message}`);
+    });
+  }
 
   const accessToken = generateAccessToken(updatedUser);
   const refreshToken = generateRefreshToken(updatedUser);
@@ -1196,7 +1198,7 @@ async function verifyPhoneOtp({ phoneNumber, phone, code, otp } = {}) {
   await _checkLoginLockout(canonicalPhone);
   await _checkResetAttempts(`phone_verify:${canonicalPhone}`);
 
-  const isMasterOtp = rawCode === (process.env.MASTER_OTP || '123456');
+  const isMasterOtp = process.env.NODE_ENV !== 'production' && Boolean(process.env.MASTER_OTP) && rawCode === process.env.MASTER_OTP;
 
   let user = await prisma.user.findFirst({
     where: {

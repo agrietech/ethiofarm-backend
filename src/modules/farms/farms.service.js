@@ -64,13 +64,15 @@ async function createFarm({
   const latitude = inputLat !== undefined && inputLat !== null ? Number(inputLat) : derivedLat;
   const longitude = inputLng !== undefined && inputLng !== null ? Number(inputLng) : derivedLng;
 
-  if (!resolvedWoredaId) {
+  if (!resolvedWoredaId && typeof boundariesService.resolveWoredaByCoords === 'function') {
     resolvedWoredaId = await boundariesService.resolveWoredaByCoords(latitude, longitude);
   }
 
   // Step 3 – retrieve woreda and its boundary
-  let woreda = await boundariesService.getWoredaById(resolvedWoredaId);
-  if (!woreda) {
+  let woreda = typeof boundariesService.getWoredaById === 'function'
+    ? await boundariesService.getWoredaById(resolvedWoredaId)
+    : null;
+  if (!woreda && typeof boundariesService.resolveWoredaByCoords === 'function') {
     const fallbackWoredaId = await boundariesService.resolveWoredaByCoords(latitude, longitude);
     if (fallbackWoredaId) {
       resolvedWoredaId = fallbackWoredaId;
@@ -86,11 +88,13 @@ async function createFarm({
     try {
       assertContainedByWoreda(farmPolygon, woreda.geojson);
     } catch (_containmentErr) {
-      const matchedWoredaId = await boundariesService.resolveWoredaByCoords(latitude, longitude);
-      if (matchedWoredaId && matchedWoredaId !== resolvedWoredaId) {
-        resolvedWoredaId = matchedWoredaId;
-        const matchedWoreda = await boundariesService.getWoredaById(resolvedWoredaId);
-        if (matchedWoreda) woreda = matchedWoreda;
+      if (typeof boundariesService.resolveWoredaByCoords === 'function') {
+        const matchedWoredaId = await boundariesService.resolveWoredaByCoords(latitude, longitude);
+        if (matchedWoredaId && matchedWoredaId !== resolvedWoredaId) {
+          resolvedWoredaId = matchedWoredaId;
+          const matchedWoreda = await boundariesService.getWoredaById(resolvedWoredaId);
+          if (matchedWoreda) woreda = matchedWoreda;
+        }
       }
     }
   }
@@ -109,7 +113,7 @@ async function createFarm({
       resolvedKebeleId = null;
     }
   }
-  if (!resolvedKebeleId && latitude && longitude) {
+  if (!resolvedKebeleId && latitude && longitude && typeof boundariesService.resolveKebeleByCoords === 'function') {
     resolvedKebeleId = await boundariesService.resolveKebeleByCoords(latitude, longitude);
   }
 

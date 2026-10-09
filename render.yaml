@@ -27,8 +27,8 @@ services:
       - key: JWT_REFRESH_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        # Allow web frontend domains and native apps (supports comma-separated list or wildcard)
-        value: https://agrietech.onrender.com,https://agrietech-web.onrender.com,*
+        # Allow web frontend domains and native apps (supports comma-separated list of domains)
+        value: https://agrietech.onrender.com,https://agrietech-web.onrender.com,https://ethiofarm-admin.onrender.com
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENWEATHER_API_KEY
