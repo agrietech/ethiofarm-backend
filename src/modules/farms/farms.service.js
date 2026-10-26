@@ -336,8 +336,9 @@ async function updateFarm({ id, data = {}, user = {}, clientUpdatedAt }) {
     }
   }
 
-  if (data.polygonGeojson) {
-    updatePayload.polygonGeojson = data.polygonGeojson;
+  const polygon = data.polygonGeojson || data.geoJsonBoundary || data.boundary;
+  if (polygon) {
+    updatePayload.polygonGeojson = polygon;
   }
 
   return await prisma.farm.update({
