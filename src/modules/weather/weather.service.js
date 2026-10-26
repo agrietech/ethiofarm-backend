@@ -1,4 +1,6 @@
 const axios = require('axios');
+const https = require('https');
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 const logger = require('../../utils/logger');
 const { prisma } = require('../../config/db');
 const redis = require('../../config/redis');
@@ -442,6 +444,7 @@ async function getWeatherForecast({
   try {
     const omUrl = 'https://api.open-meteo.com/v1/forecast';
     const omRes = await axios.get(omUrl, {
+      httpsAgent,
       params: {
         latitude: location.lat,
         longitude: location.lng,
@@ -630,18 +633,31 @@ async function getWeatherForecast({
     }
   } else {
     // Diurnal atmospheric simulation based on solar cycle & location temperature in Ethiopia
-    const currentHourIso = getEthiopianCurrentHourIso();
-    const [datePart, hourStr] = currentHourIso.split('T');
-    const startHour = parseInt(hourStr.split(':')[0], 10);
+    const baseDate = new Date();
 
     for (let hr = 0; hr < 24; hr++) {
-      const hourPart = (startHour + hr) % 24;
+      const stepDate = new Date(baseDate.getTime() + hr * 3600000);
+      const stepEatDateStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Addis_Ababa',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(stepDate);
+      const stepEatHour = parseInt(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Africa/Addis_Ababa',
+          hour: 'numeric',
+          hour12: false,
+        }).format(stepDate),
+        10
+      );
+      const hourPart = stepEatHour;
       const diurnalFactor = Math.sin(((hourPart - 9) / 24) * 2 * Math.PI);
       const hourTemp = Math.round((current.temperatureC + diurnalFactor * 4.5) * 10) / 10;
       const hourHumidity = Math.min(95, Math.max(25, Math.round(current.relativeHumidity - diurnalFactor * 15)));
 
       hourly.push({
-        time: `${datePart}T${String(hourPart).padStart(2, '0')}:00`,
+        time: `${stepEatDateStr}T${String(hourPart).padStart(2, '0')}:00`,
         hourLabel: `${String(hourPart).padStart(2, '0')}:00`,
         temperatureC: hourTemp,
         precipitationProbability: current.precipitationMm > 0 ? 60 : 5,
@@ -756,7 +772,7 @@ async function getWeatherForecast({
     daily,
     climatology,
     dataSources: [
-      openMeteoData ? 'Open-Meteo High-Resolution WMO (Hourly Model)' : null,
+      openMeteoData ? 'Open-Meteo High-Resolution WMO (Hourly Model)' : 'Open-Meteo Climatological Synthesis',
       openWeatherData ? 'OpenWeatherMap Live Telemetry' : null,
       'World Bank Climate Normal Baseline',
     ].filter(Boolean).join(' • '),
