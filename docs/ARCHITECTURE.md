@@ -66,3 +66,42 @@ AgriEtech backend is built on an asynchronous, event-driven Node.js and Express 
    - Queries USGS Earthquake Hazards API on an hourly frequency across Ethiopia's bounding box ($3.0-15.5^\circ\text{N}, 32.5-48.5^\circ\text{E}$) and computes Peak Ground Acceleration ($PGA$) along the Wonji Fault Belt.
 3. **Hyper-Local Agronomy Engine**:
    - Synthesizes sensor telemetry, satellite moisture indices, and weather forecasts into actionable advice in English, Amharic, and Afaan Oromoo.
+
+---
+
+## 5. Security, Middleware & Rate Limiting
+
+- **Helmet.js & CORS**: Enforces strict Content Security Policy, HSTS, frameguard, and whitelisted client origins.
+- **Tiered Rate Limiter** (`src/middleware/rateLimiter.js`):
+  - Public / Auth Endpoints: 10 requests / minute.
+  - Telemetry & General Queries: 120 requests / minute.
+  - Sensor Ingestion: 600 requests / minute per API key.
+- **Health Check Probe**: `GET /health` returns JSON database latency, Redis ping, active memory usage, and background scheduler status.
+
+---
+
+## 6. Container Orchestration & Deployment
+
+The platform is containerized using Docker and orchestrated via Docker Compose:
+
+```bash
+# Build and run backend container with PostgreSQL PostGIS & Redis
+docker-compose up -d --build
+```
+
+---
+
+## 7. Testing & Quality Assurance Verification
+
+The backend includes automated verification scripts and unit tests:
+
+```bash
+# Multi-Satellite, Seismology & RUSLE Engine Suite
+node scripts/test_earth_engine_disasters_seismology.js
+
+# Expert Limitations, USSD *212# & Pathology Suite
+node scripts/test_expert_limitations_fixes.js
+
+# Jest Unit Test Suite
+npm test
+```

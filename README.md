@@ -126,15 +126,24 @@ npm test
 
 ---
 
-## 📚 Official Documentation Catalog
+## 👥 Engineering Team Work Breakdown & Ownership
 
-For detailed architecture blueprints and technical guides, refer to the [**Backend Documentation Catalog**](docs/README.md):
+**Abraham Amogne** serves as the **Team Leader & Full-Stack System Architect**. Engineering deliverables and domain ownership across the platform are structured as follows:
 
-- [Architecture Blueprint](docs/ARCHITECTURE.md)
-- [API Specification (OpenAPI / REST)](docs/API_SPECIFICATION.md)
-- [Disaster Intelligence System (GEE, USGS & RUSLE)](docs/DISASTER_INTELLIGENCE_SYSTEM.md)
-- [Role-Based Access Control (7-Tier Hierarchy)](docs/ROLE_BASED_ACCESS_CONTROL.md)
-- [IoT Hardware & ESP32 Integration Guide](docs/ESP32_IOT_INTEGRATION_GUIDE.md)
-- [Deployment & Operations Guide](docs/DEPLOYMENT_AND_OPERATIONS.md)
-- [Testing & Quality Assurance Verification](docs/TESTING_AND_VERIFICATION.md)
-- [Arduino Moisture Node Firmware](docs/arduino_firebase_moisture_node.ino)
+| Engineer | Student ID | Formal Engineering Role | Assigned System Deliverables | Project Domain Focus |
+| :--- | :--- | :--- | :--- | :--- |
+| **Abraham Amogne** | `CTC-329-26` | **Team Leader · System Architect** | System Architecture, Express API Gateway, PostgreSQL PostGIS schemas and migrations, 7-tier geographic RBAC middleware, Google Earth Engine satellite connector, USGS Joyner-Boore seismology engine, RUSLE soil loss equations, Master Multi-Hazard Composite Predictor, Socket.IO real-time alert gateway, and USSD `*212#` state engine. | `agriEtech-backend`<br>`agriEtech-frontend`<br>`ethiofarm-web` |
+| **Alen Biruk** | `CTC-2176-26` | **Web Platform Engineer** | Farm Operations & IoT Soil Sensor Fleet, OCHA HDX boundary GeoJSON indexing, farm polygon validation, and ground sensor telemetry. | `ethiofarm-web` (Farm Operations) |
+| **Zinegnaw** | `CTC-514-26` | **Web Platform Engineer** | Crop AI Vision & Pathology, camera viewfinder capture, multipart botanical photo analysis, and plant disease triage services. | `ethiofarm-web` (Crop Pathology) |
+| **Banchamlak Golla** | `CTC-2952-26` | **Web Platform Engineer** | Agro-Meteorology & Alerts, Open-Meteo weather telemetry caching, Copernicus GloFAS river discharge, and multi-hazard alert notifications. | `ethiofarm-web` (Weather & Hazards) |
+
+---
+
+## 📚 Compulsory Developer Documentation
+
+For technical implementation blueprints and API contracts, refer to the [**Backend Documentation Catalog**](docs/README.md):
+
+- [**Architecture Blueprint**](docs/ARCHITECTURE.md) — Layered design, Redis caching, PostGIS geodatabase, GEE pipelines, Docker deployment, and testing quality gates.
+- [**API Specification (REST & OpenAPI)**](docs/API_SPECIFICATION.md) — Exhaustive REST OpenAPI endpoints, query schemas, JSON request/response bodies, and error formats.
+- [**IoT Firmware Repository**](firmware/README.md) — Embedded C++ sketch for ESP32/Arduino capacitive soil moisture and NPK sensor telemetry node.
+

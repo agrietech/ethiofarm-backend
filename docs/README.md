@@ -1,18 +1,28 @@
-# AgriEtech Backend Documentation Catalog
+# AgriEtech Backend Developer Documentation
 
-Welcome to the official documentation catalog for the **AgriEtech Multi-Hazard Agricultural Early Warning Platform (Backend)**.
+Welcome to the official developer documentation suite for the **AgriEtech Multi-Hazard Agricultural Early Warning Platform (Backend)**.
 
 ---
 
-## 📚 Master Index
+## 📚 Compulsory Developer References
 
-| Document | Purpose & Scope |
-| :--- | :--- |
-| [**Architecture**](ARCHITECTURE.md) | High-level system architecture, layered design, Redis caching, and GEE pipelines. |
-| [**API Specification**](API_SPECIFICATION.md) | Exhaustive REST OpenAPI endpoints, query schemas, JSON bodies, and error formats. |
-| [**Disaster Intelligence System**](DISASTER_INTELLIGENCE_SYSTEM.md) | Remote sensing (Sentinel-2, SAR, Landsat, SRTM), USGS Seismology, RUSLE Soil Loss, and Multi-Hazard Index ($MHNDI$). |
-| [**Role-Based Access Control**](ROLE_BASED_ACCESS_CONTROL.md) | 7-tier Ethiopian agricultural hierarchy, geographic scoping (`woredaId`, `regionId`), and security middleware. |
-| [**IoT Hardware Guide**](ESP32_IOT_INTEGRATION_GUIDE.md) | ESP32 wiring, LoRaWAN/Wi-Fi telemetry payloads, and sensor API key authentication. |
-| [**Deployment & Operations**](DEPLOYMENT_AND_OPERATIONS.md) | Docker Compose orchestration, PostgreSQL PostGIS configuration, Redis setup, and rate limiting. |
-| [**Testing & Verification**](TESTING_AND_VERIFICATION.md) | Automated validation scripts, Jest unit tests, and CI/CD quality gates. |
-| [**Arduino Sensor Node Sketch**](arduino_firebase_moisture_node.ino) | C++ source code for soil moisture and NPK sensor hardware telemetry node. |
+| Document | Purpose & Scope | Target Audience |
+| :--- | :--- | :--- |
+| [**Architecture Blueprint**](ARCHITECTURE.md) | High-level system architecture, layered design, Redis caching, PostGIS geodatabase, GEE pipelines, Docker deployment, and automated test execution. | System Architects & Developers |
+| [**API Specification (REST & OpenAPI)**](API_SPECIFICATION.md) | Exhaustive REST OpenAPI endpoints, query schemas, JSON request/response bodies, and error formats. | Backend & Client Developers |
+| [**IoT Firmware Repository**](../firmware/README.md) | Embedded C++ sketch and hardware guide for ESP32/Arduino capacitive soil moisture and telemetry node. | Hardware Firmware Developers |
+
+---
+
+## 🛠️ Verification & Quality Gates
+
+```bash
+# 1. Verify code standards with ESLint
+npm run lint
+
+# 2. Run automated production readiness audit
+node scripts/production_audit.js
+
+# 3. Execute Jest unit and integration test suite
+npm test
+```
