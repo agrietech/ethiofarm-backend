@@ -51,9 +51,18 @@ class FarmerDashboardService {
       userProfile: {
         userId,
         totalFarms: myFarms.length,
+        totalArea: parseFloat(totalArea.toFixed(2)),
         totalAreaHectares: parseFloat(totalArea.toFixed(2)),
         activeSensors: sensorStatus.active,
         totalSensors: sensorStatus.total,
+      },
+
+      farmSummary: {
+        totalFarms: myFarms.length,
+        totalArea: parseFloat(totalArea.toFixed(2)),
+        totalAreaHectares: parseFloat(totalArea.toFixed(2)),
+        farmsAtRisk: myFarms.filter((f) => this.calculateFarmHealth(f, 0) === 'AT_RISK').length,
+        activeSensors: sensorStatus.active,
       },
 
       // Quick action cards
