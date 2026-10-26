@@ -50,6 +50,6 @@ Capacitive soil moisture sensors produce analog ADC voltage corresponding to die
 
 ## 📡 Remote Telemetry Integration
 
-- **Firebase Realtime Database target**: `https://arduinomoisture-default-rtdb.firebaseio.com/sensors/<HARDWARE_ID>.json`
+- **Firebase Realtime Database target**: `https://your-project-id.firebaseio.com/sensors/<HARDWARE_ID>.json`
 - **AgriEtech Ingestion Endpoint**: `POST /api/v1/sensors/telemetry` (Header: `x-sensor-api-key: <TOKEN>`)
 - Detailed payload specifications and LoRaWAN bridging guides are documented in [**docs/ESP32_IOT_INTEGRATION_GUIDE.md**](../docs/ESP32_IOT_INTEGRATION_GUIDE.md).

@@ -3,6 +3,9 @@ node_modules/
 
 # Environment
 .env
+.env.*
+!.env.example
+!.env.production.example
 
 # Build & IDE
 dist/
