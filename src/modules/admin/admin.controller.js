@@ -1,4 +1,5 @@
 const adminService = require('./admin.service');
+const servicesRegistryService = require('./servicesRegistry.service');
 const { assertResourceInScope } = require('../../middleware/scope-filter.utils');
 
 /**
@@ -659,6 +660,79 @@ async function handleAdminResetPassword(req, res) {
     }
 }
 
+async function getServicesRegistry(req, res, next) {
+    try {
+        const forceRefresh = req.query.refresh === 'true' || req.query.force === 'true';
+        const data = await servicesRegistryService.getServicesRegistry(forceRefresh);
+        return res.status(200).json({ success: true, data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function pingService(req, res, next) {
+    try {
+        const serviceId = req.body?.serviceId || req.query?.serviceId;
+        if (!serviceId) {
+            const data = await servicesRegistryService.getServicesRegistry(true);
+            return res.status(200).json({ success: true, message: 'All services pinged successfully', data: data.services });
+        }
+        const data = await servicesRegistryService.pingService(serviceId);
+        return res.status(200).json({ success: true, data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function executeServiceAction(req, res, next) {
+    try {
+        const { action, serviceId, payload } = req.body || {};
+        const adminContext = { id: req.user?.id, email: req.user?.email, ip: req.ip };
+        let result;
+
+        switch (action) {
+            case 'purgeCache':
+                result = await servicesRegistryService.purgeCache();
+                await adminService.logAuditAction({
+                    action: 'SERVICES_CACHE_PURGED',
+                    adminId: adminContext.id,
+                    adminEmail: adminContext.email,
+                    details: 'Purged Redis query caches and rate limiters',
+                    ipAddress: adminContext.ip,
+                });
+                break;
+            case 'clearRateLimits':
+                result = await servicesRegistryService.clearRateLimits();
+                break;
+            case 'sendTestNotification':
+                result = await servicesRegistryService.sendTestNotification(payload?.channel, payload?.recipient);
+                await adminService.logAuditAction({
+                    action: 'SERVICES_TEST_NOTIFICATION_SENT',
+                    adminId: adminContext.id,
+                    adminEmail: adminContext.email,
+                    details: `Dispatched test ${payload?.channel || 'SMS'} to ${payload?.recipient || 'default'}`,
+                    ipAddress: adminContext.ip,
+                });
+                break;
+            case 'triggerIngestion':
+                result = await adminService.triggerIngestion(payload?.jobType || 'pullWeatherForecast', payload || {}, adminContext);
+                break;
+            case 'ping':
+                result = await servicesRegistryService.pingService(serviceId);
+                break;
+            default:
+                return res.status(400).json({
+                    success: false,
+                    error: { message: `Unknown action '${action}'. Valid: purgeCache, clearRateLimits, sendTestNotification, triggerIngestion, ping` }
+                });
+        }
+
+        return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+        next(error);
+    }
+}
+
 module.exports = {
     cleanTestData,
     getOverview,
@@ -685,6 +759,9 @@ module.exports = {
     getDiagnosisDetails,
     deleteDiagnosis,
     getSystemHealth,
+    getServicesRegistry,
+    pingService,
+    executeServiceAction,
     triggerIngestion,
     broadcastEmergencyAlert,
     getFarmerAudienceStats,
