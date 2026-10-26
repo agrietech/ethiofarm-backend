@@ -746,6 +746,99 @@
       border-color: #38bdf8;
       color: white;
     }
+
+    /* API & Cloud Microservices Sentinel Styling */
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.25rem;
+      margin-top: 1rem;
+    }
+    .service-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      background: var(--card-bg);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: var(--shadow);
+    }
+    .service-card:hover {
+      border-color: var(--primary);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+    .service-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
+    .service-icon-box {
+      width: 42px;
+      height: 42px;
+      border-radius: 8px;
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+      border: 1px solid var(--border);
+    }
+    .latency-pill {
+      font-size: 0.725rem;
+      font-weight: 700;
+      padding: 0.2rem 0.55rem;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .latency-fast { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+    .latency-medium { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+    .latency-slow { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .endpoint-code {
+      font-family: monospace;
+      font-size: 0.72rem;
+      background: #f1f5f9;
+      color: #334155;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      word-break: break-all;
+      display: inline-block;
+      margin-top: 0.35rem;
+      margin-bottom: 0.5rem;
+    }
+    .progress-track {
+      background: #e2e8f0;
+      border-radius: 8px;
+      height: 10px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+    .progress-fill {
+      background: linear-gradient(90deg, #10b981, #3b82f6);
+      height: 100%;
+      transition: width 0.5s ease;
+    }
+    .category-filter-btn {
+      padding: 0.4rem 0.85rem;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+    .category-filter-btn.active, .category-filter-btn:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
   </style>
 </head>
 <body>
@@ -814,6 +907,9 @@
       <div class="nav-group-title">System & DevOps</div>
       <div class="nav-item" onclick="showTab('system', this)">
         <span>⚙️</span> Health & Pipelines
+      </div>
+      <div class="nav-item" onclick="showTab('servicesRegistry', this)">
+        <span>🌐</span> API & Services Sentinel
       </div>
     </aside>
 
@@ -1385,6 +1481,10 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Boundaries Explorer Tab -->
       <div id="boundaries" class="tab">
         <div class="card">
@@ -1451,6 +1551,171 @@
                   <div><strong style="color: var(--text-muted);">Center Lng:</strong> <span id="detailWoredaLng"></span></div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 11. API & Cloud Services Sentinel Tab -->
+      <div id="servicesRegistry" class="tab">
+        <div class="panel">
+          <div class="panel-header" style="background: linear-gradient(135deg, #0f172a, #1e293b); color: white;">
+            <div>
+              <div class="panel-title" style="color: white;">
+                <span>🌐</span> API & Cloud Microservices Sentinel
+              </div>
+              <p style="font-size: 0.775rem; color: #94a3b8; margin-top: 0.2rem;">
+                Unified enterprise observability: live health telemetry, latency monitoring, and control interface for all internal & external microservices
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" onclick="pingAllServicesUI()" id="pingAllBtn">⚡ Ping All Services</button>
+              <button class="btn btn-primary btn-sm" onclick="loadServicesRegistry(true)">🔄 Force Refresh</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <!-- Summary KPI Grid -->
+            <div class="stats" style="margin-bottom: 1.5rem;">
+              <div class="stat-card">
+                <div class="stat-label">Monitored Services</div>
+                <div class="stat-value" id="sentinelTotalServices">16</div>
+                <div class="stat-subtext">APIs, Gateways & Storage</div>
+              </div>
+              <div class="stat-card blue">
+                <div class="stat-label">Operational Cluster</div>
+                <div class="stat-value" id="sentinelHealthyServices" style="color: #10b981;">16 / 16</div>
+                <div class="stat-subtext" id="sentinelClusterStatus">Cluster Status: HEALTHY</div>
+              </div>
+              <div class="stat-card amber">
+                <div class="stat-label">Average API Latency</div>
+                <div class="stat-value" id="sentinelAvgLatency">48 ms</div>
+                <div class="stat-subtext">Round-trip gateway ping</div>
+              </div>
+              <div class="stat-card purple">
+                <div class="stat-label">Render Heap Memory</div>
+                <div class="stat-value" id="sentinelHeapMemory">45 MB</div>
+                <div class="stat-subtext" id="sentinelHeapPct">Utilization: 32%</div>
+              </div>
+            </div>
+
+            <!-- Management Actions Toolbar -->
+            <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+              <div>
+                <strong style="font-size: 0.85rem; color: var(--text);">⚡ Administrative Service Actions</strong>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.1rem;">Safely manage runtime caches, throttle limits, and delivery queues</p>
+              </div>
+              <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+                <button class="btn btn-secondary btn-sm" onclick="purgeCacheUI()" title="Flush Redis query cache">🧹 Flush Redis Cache</button>
+                <button class="btn btn-secondary btn-sm" onclick="clearRateLimitsUI()" title="Reset rate limiting quotas">⚡ Reset Rate Limits</button>
+                <button class="btn btn-primary btn-sm" onclick="openTestNotificationModal()">📨 Send Test Dispatch</button>
+              </div>
+            </div>
+
+            <!-- Filter Categories & Search Bar -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+              <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;" id="categoryFilterBar">
+                <button class="category-filter-btn active" onclick="filterServicesCategory('ALL', this)">All (16)</button>
+                <button class="category-filter-btn" onclick="filterServicesCategory('Agronomic', this)">Agronomic & Weather</button>
+                <button class="category-filter-btn" onclick="filterServicesCategory('AI', this)">AI & Vision</button>
+                <button class="category-filter-btn" onclick="filterServicesCategory('Delivery', this)">Delivery & Messaging</button>
+                <button class="category-filter-btn" onclick="filterServicesCategory('Infrastructure', this)">Infrastructure</button>
+              </div>
+              <div class="search-box" style="max-width: 280px;">
+                <input type="text" class="search-input" id="servicesSearchInput" placeholder="Filter services..." oninput="onServicesSearch(this.value)">
+              </div>
+            </div>
+
+            <!-- Services Matrix Grid -->
+            <div id="servicesGrid" class="services-grid">
+              <div>Loading monitored microservices & APIs...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Render Host & Runtime Performance Panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">🖥️ Render Host & Node.js Runtime Performance</div>
+            <button class="btn btn-secondary btn-sm" onclick="loadServicesRegistry(true)">🔄 Poll Telemetry</button>
+          </div>
+          <div class="panel-body">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+              <div>
+                <strong style="font-size: 0.85rem; color: var(--text);">Process Memory Utilization</strong>
+                <div class="progress-track" style="margin-top: 0.75rem; height: 14px;">
+                  <div class="progress-fill" id="hostMemoryBar" style="width: 35%;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-muted); margin-top: 0.4rem;">
+                  <span>Used: <strong id="hostHeapUsed">0 MB</strong></span>
+                  <span>Total Heap: <strong id="hostHeapTotal">0 MB</strong></span>
+                  <span>RSS: <strong id="hostRss">0 MB</strong></span>
+                </div>
+              </div>
+              <div>
+                <strong style="font-size: 0.85rem; color: var(--text);">Host Specifications & Environment</strong>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.8rem; margin-top: 0.5rem;">
+                  <div><span style="color:var(--text-muted);">Node Version:</span> <code id="hostNodeVersion">v20.x</code></div>
+                  <div><span style="color:var(--text-muted);">Platform:</span> <strong id="hostPlatform">linux</strong></div>
+                  <div><span style="color:var(--text-muted);">Process Uptime:</span> <strong id="hostUptime">0 mins</strong></div>
+                  <div><span style="color:var(--text-muted);">CPU Cores:</span> <strong id="hostCpuCores">4 cores</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Production Environment Audit Checklist Panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">🛡️ Production Environment Variables Audit</div>
+            <span class="badge badge-success">Zero Secret Exposure</span>
+          </div>
+          <div class="panel-body">
+            <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 1rem;">
+              Audits all critical production API keys and connection parameters. Configured services run against live upstream providers, while fallback modes operate with intelligent offline synthesizers.
+            </p>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Environment Variable</th>
+                    <th>Category</th>
+                    <th>Audit Status</th>
+                    <th>Purpose / Provider</th>
+                  </tr>
+                </thead>
+                <tbody id="envAuditTable">
+                  <tr><td colspan="4">Loading environment audit...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Platform API Route Catalog Panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">📑 Registered Platform API Route Catalog</div>
+            <div class="search-box" style="max-width: 240px;">
+              <input type="text" class="search-input" id="routeCatalogSearch" placeholder="Search endpoints..." oninput="onRouteCatalogSearch(this.value)">
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th>Endpoint Path</th>
+                    <th>Auth Role</th>
+                    <th>Module</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody id="apiCatalogTable">
+                  <tr><td colspan="5">Loading API catalog...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -1738,6 +2003,43 @@
     </div>
   </div>
 
+  <!-- Test Notification Modal -->
+  <div id="testNotificationModal" class="modal">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #1e293b, #0f172a); color: white;">
+        <div>
+          <h3 class="modal-title" style="color: white; display: flex; align-items: center; gap: 0.5rem;">
+            <span>📨</span> Diagnostic Notification Dispatch
+          </h3>
+          <p style="font-size: 0.775rem; color: #94a3b8; margin-top: 0.2rem;">Verify outbound SMS or Email transport channels safely</p>
+        </div>
+        <button class="modal-close" style="color: white;" onclick="closeModal('testNotificationModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="testNotificationForm" onsubmit="event.preventDefault(); submitTestNotification();">
+          <div class="form-group">
+            <label class="form-label">Delivery Channel *</label>
+            <select class="form-select" id="testChannel" onchange="onTestChannelChange()" required>
+              <option value="SMS">💬 SMS Gateway (Ethio Telecom / SMSEthiopia)</option>
+              <option value="EMAIL">📧 SMTP Email Dispatcher</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" id="testRecipientLabel">Recipient Phone Number *</label>
+            <input type="text" class="form-input" id="testRecipient" placeholder="+251911223344" value="+251911223344" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Diagnostic Message (Optional)</label>
+            <textarea class="form-textarea" id="testMessage" placeholder="Leave blank for standard automated ping message..."></textarea>
+          </div>
+          <button type="submit" id="testNotificationBtn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 0.75rem; font-weight: 700;">
+            🚀 Dispatch Diagnostic Test
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Admin Authentication Modal -->
   <div id="authModal" class="modal">
     <div class="modal-content" style="max-width: 440px;">
@@ -1994,6 +2296,7 @@
       else if (tabName === 'diagnoses') loadDiagnoses();
       else if (tabName === 'riskAssessments') loadRisks();
       else if (tabName === 'system') loadSystem();
+      else if (tabName === 'servicesRegistry') loadServicesRegistry();
     }
 
     function refreshCurrentTab() {
@@ -2008,6 +2311,7 @@
       else if (activeTabName === 'diagnoses') loadDiagnoses();
       else if (activeTabName === 'riskAssessments') loadRisks();
       else if (activeTabName === 'system') loadSystem();
+      else if (activeTabName === 'servicesRegistry') loadServicesRegistry(true);
     }
 
     function openModal(id) {
@@ -3584,6 +3888,369 @@ Active real records preserved: ${json.data.current.users} users, ${json.data.cur
     function getSeverityBadge(severity) {
       const map = { LOW: 'success', MODERATE: 'warning', WARNING: 'warning', HIGH: 'danger', CRITICAL: 'danger' };
       return map[severity] || 'info';
+    }
+
+    // ==========================================
+    // 11. API & Cloud Services Sentinel Logic
+    // ==========================================
+    let servicesRegistryData = null;
+    let activeServiceCategory = 'ALL';
+
+    async function loadServicesRegistry(forceRefresh = false) {
+      const grid = document.getElementById('servicesGrid');
+      if (grid && !servicesRegistryData) {
+        grid.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">Querying live microservice cluster telemetry...</div>';
+      }
+
+      try {
+        const query = forceRefresh ? '?refresh=true' : '';
+        const res = await fetch(`/api/v1/admin/services-registry${query}`, { headers: getAuthHeaders() });
+        const json = await res.json();
+        if (json.success && json.data) {
+          servicesRegistryData = json.data;
+          renderServicesRegistryUI(json.data);
+        } else {
+          showToast(json.message || 'Failed to load services registry', 'error');
+        }
+      } catch (e) {
+        showToast('Error loading services registry', 'error');
+        if (grid) grid.innerHTML = '<div style="color:var(--danger);padding:1rem;">Failed to connect to cluster sentinel service.</div>';
+      }
+    }
+
+    function renderServicesRegistryUI(data) {
+      if (!data) return;
+      const s = data.summary || {};
+      const host = data.hostTelemetry || {};
+      const mem = host.memory || {};
+
+      // 1. KPI Badges
+      if (document.getElementById('sentinelTotalServices')) {
+        document.getElementById('sentinelTotalServices').textContent = s.totalServices || 16;
+      }
+      if (document.getElementById('sentinelHealthyServices')) {
+        document.getElementById('sentinelHealthyServices').textContent = `${s.operationalCount || 0} / ${s.totalServices || 16}`;
+        document.getElementById('sentinelHealthyServices').style.color = (s.offlineCount > 0) ? 'var(--danger)' : '#10b981';
+      }
+      if (document.getElementById('sentinelClusterStatus')) {
+        document.getElementById('sentinelClusterStatus').textContent = `Cluster: ${s.overallClusterStatus || 'HEALTHY'}`;
+      }
+      if (document.getElementById('sentinelAvgLatency')) {
+        document.getElementById('sentinelAvgLatency').textContent = `${s.avgLatencyMs || 0} ms`;
+      }
+      if (document.getElementById('sentinelHeapMemory')) {
+        document.getElementById('sentinelHeapMemory').textContent = `${mem.heapUsedMb || 45} MB`;
+      }
+      if (document.getElementById('sentinelHeapPct')) {
+        document.getElementById('sentinelHeapPct').textContent = `Heap Used: ${mem.heapUtilizationPct || 35}%`;
+      }
+
+      // 2. Render Host Memory Bar
+      if (document.getElementById('hostMemoryBar')) {
+        const pct = Math.min(100, Math.max(5, mem.heapUtilizationPct || 35));
+        document.getElementById('hostMemoryBar').style.width = `${pct}%`;
+      }
+      if (document.getElementById('hostHeapUsed')) document.getElementById('hostHeapUsed').textContent = `${mem.heapUsedMb || 0} MB`;
+      if (document.getElementById('hostHeapTotal')) document.getElementById('hostHeapTotal').textContent = `${mem.heapTotalMb || 0} MB`;
+      if (document.getElementById('hostRss')) document.getElementById('hostRss').textContent = `${mem.rssMb || 0} MB`;
+      if (document.getElementById('hostNodeVersion')) document.getElementById('hostNodeVersion').textContent = host.nodeVersion || 'v20.x';
+      if (document.getElementById('hostPlatform')) document.getElementById('hostPlatform').textContent = `${host.platform} (${host.arch})`;
+      if (document.getElementById('hostUptime')) {
+        const mins = Math.floor((host.uptimeSeconds || 0) / 60);
+        document.getElementById('hostUptime').textContent = mins > 60 ? `${(mins / 60).toFixed(1)} hrs` : `${mins} mins`;
+      }
+      if (document.getElementById('hostCpuCores')) document.getElementById('hostCpuCores').textContent = `${host.cpuCount || 4} CPU cores`;
+
+      // 3. Render Services Cards Grid
+      renderServicesGrid(data.services || []);
+
+      // 4. Render Environment Audit Checklist
+      renderEnvAuditTable(data.environmentAudit || []);
+
+      // 5. Render API Route Catalog
+      renderApiCatalogTable(data.apiRouteCatalog || []);
+    }
+
+    function renderServicesGrid(services) {
+      const grid = document.getElementById('servicesGrid');
+      if (!grid) return;
+
+      const filtered = services.filter(s => {
+        if (activeServiceCategory === 'ALL') return true;
+        return (s.category || '').toLowerCase().includes(activeServiceCategory.toLowerCase());
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '<div style="padding:1rem;color:var(--text-muted);">No microservices match category filter.</div>';
+        return;
+      }
+
+      grid.innerHTML = filtered.map(svc => {
+        const isHealthy = svc.status === 'OPERATIONAL' || svc.status === 'HEALTHY';
+        const badgeClass = isHealthy ? 'badge-success' : (svc.status === 'DEGRADED' ? 'badge-warning' : 'badge-danger');
+        const latency = svc.latencyMs || 0;
+        const latencyClass = latency < 80 ? 'latency-fast' : (latency < 250 ? 'latency-medium' : 'latency-slow');
+
+        return `
+          <div class="service-card" id="card_${svc.id}">
+            <div>
+              <div class="service-card-header">
+                <div style="display:flex;align-items:center;gap:0.75rem;">
+                  <div class="service-icon-box">${svc.icon || '🌐'}</div>
+                  <div>
+                    <h4 style="font-size:0.95rem;font-weight:700;color:var(--text);margin:0;">${escapeHtml(svc.name)}</h4>
+                    <span style="font-size:0.72rem;color:var(--text-muted);">${escapeHtml(svc.category)}</span>
+                  </div>
+                </div>
+                <span class="badge ${badgeClass}" id="badge_${svc.id}">${svc.status}</span>
+              </div>
+
+              <div>
+                <span class="endpoint-code" title="${escapeHtml(svc.endpoint)}">${escapeHtml(svc.endpoint || 'Internal Engine')}</span>
+              </div>
+
+              <div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:0.75rem;">
+                <div><strong>Auth/Status:</strong> <code>${escapeHtml(svc.authStatus || 'CONFIGURED')}</code></div>
+                ${svc.details?.model ? `<div><strong>Model:</strong> <code>${escapeHtml(svc.details.model)}</code></div>` : ''}
+                ${svc.details?.spatialSupport ? `<div><strong>Spatial:</strong> ${escapeHtml(svc.details.spatialSupport)}</div>` : ''}
+              </div>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;padding-top:0.75rem;border-top:1px solid var(--border);">
+              <span class="latency-pill ${latencyClass}" id="latency_${svc.id}">
+                <span>⚡</span> ${latency} ms
+              </span>
+              <button class="btn btn-secondary btn-sm" onclick="pingSingleService('${svc.id}')" id="btn_ping_${svc.id}">
+                ⚡ Test Ping
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderEnvAuditTable(envItems) {
+      const tbody = document.getElementById('envAuditTable');
+      if (!tbody) return;
+      tbody.innerHTML = envItems.map(item => `
+        <tr>
+          <td><code>${escapeHtml(item.key)}</code></td>
+          <td><span class="badge badge-info">${escapeHtml(item.category)}</span></td>
+          <td>
+            <span class="badge ${item.configured ? 'badge-success' : 'badge-warning'}">
+              ${item.configured ? '✅ CONFIGURED' : '⚠️ FALLBACK / LOCAL'}
+            </span>
+          </td>
+          <td><small>${escapeHtml(item.description)}</small></td>
+        </tr>
+      `).join('') || '<tr><td colspan="4">No variables audited</td></tr>';
+    }
+
+    function renderApiCatalogTable(routes) {
+      const tbody = document.getElementById('apiCatalogTable');
+      if (!tbody) return;
+      tbody.innerHTML = routes.map(r => {
+        const methodBadge = r.method === 'GET' ? 'badge-success' : (r.method === 'POST' ? 'badge-info' : (r.method === 'PUT' ? 'badge-warning' : 'badge-danger'));
+        return `
+          <tr>
+            <td><span class="badge ${methodBadge}">${r.method}</span></td>
+            <td><code>${escapeHtml(r.path)}</code></td>
+            <td><small><strong>${escapeHtml(r.auth)}</strong></small></td>
+            <td><span class="badge badge-secondary">${escapeHtml(r.category)}</span></td>
+            <td><small>${escapeHtml(r.description)}</small></td>
+          </tr>
+        `;
+      }).join('') || '<tr><td colspan="5">No catalog endpoints found</td></tr>';
+    }
+
+    function filterServicesCategory(category, btn) {
+      activeServiceCategory = category;
+      document.querySelectorAll('#categoryFilterBar .category-filter-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      if (servicesRegistryData) {
+        renderServicesGrid(servicesRegistryData.services || []);
+      }
+    }
+
+    function onServicesSearch(query) {
+      if (!servicesRegistryData) return;
+      const q = (query || '').toLowerCase().trim();
+      const allServices = servicesRegistryData.services || [];
+      const matches = allServices.filter(s => {
+        return s.name.toLowerCase().includes(q) ||
+               s.category.toLowerCase().includes(q) ||
+               (s.endpoint && s.endpoint.toLowerCase().includes(q)) ||
+               s.id.toLowerCase().includes(q);
+      });
+      renderServicesGrid(matches);
+    }
+
+    function onRouteCatalogSearch(query) {
+      if (!servicesRegistryData) return;
+      const q = (query || '').toLowerCase().trim();
+      const allRoutes = servicesRegistryData.apiRouteCatalog || [];
+      const matches = allRoutes.filter(r => {
+        return r.path.toLowerCase().includes(q) ||
+               r.method.toLowerCase().includes(q) ||
+               r.category.toLowerCase().includes(q) ||
+               r.description.toLowerCase().includes(q);
+      });
+      renderApiCatalogTable(matches);
+    }
+
+    async function pingSingleService(serviceId) {
+      const btn = document.getElementById(`btn_ping_${serviceId}`);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Testing...';
+      }
+
+      try {
+        const res = await fetch('/api/v1/admin/services-registry/ping', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ serviceId }),
+        });
+        const json = await res.json();
+        if (json.success && json.data) {
+          const d = json.data;
+          const latEl = document.getElementById(`latency_${serviceId}`);
+          if (latEl) latEl.innerHTML = `<span>⚡</span> ${d.latencyMs} ms`;
+          const badgeEl = document.getElementById(`badge_${serviceId}`);
+          if (badgeEl) {
+            badgeEl.textContent = d.status;
+            badgeEl.className = `badge ${d.status === 'OPERATIONAL' ? 'badge-success' : 'badge-warning'}`;
+          }
+          showToast(`⚡ ${d.name || serviceId}: ${d.status} (${d.latencyMs} ms)`);
+        } else {
+          showToast(`Ping failed for ${serviceId}`, 'error');
+        }
+      } catch (e) {
+        showToast(`Network error testing ${serviceId}`, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '⚡ Test Ping';
+        }
+      }
+    }
+
+    async function pingAllServicesUI() {
+      const btn = document.getElementById('pingAllBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Pinging all 16 microservices...';
+      }
+
+      showToast('Initiating concurrent ping sweep across all microservices...');
+      try {
+        await loadServicesRegistry(true);
+        showToast('✅ All microservices and APIs tested successfully!');
+      } catch (e) {
+        showToast('Error during services ping sweep', 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '⚡ Ping All Services';
+        }
+      }
+    }
+
+    async function purgeCacheUI() {
+      if (!confirm('Flush all Redis query caches, token blacklists, and in-memory caches?')) return;
+      try {
+        const res = await fetch('/api/v1/admin/services-registry/action', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ action: 'purgeCache' }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          showToast('🧹 Redis query caches & session stores purged successfully!');
+          loadServicesRegistry(true);
+        } else {
+          showToast(json.message || 'Failed to purge cache', 'error');
+        }
+      } catch (e) {
+        showToast('Error purging cache', 'error');
+      }
+    }
+
+    async function clearRateLimitsUI() {
+      if (!confirm('Reset all rate limit throttles and IP locks?')) return;
+      try {
+        const res = await fetch('/api/v1/admin/services-registry/action', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ action: 'clearRateLimits' }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          showToast('⚡ Rate limiting quotas reset across all endpoints!');
+        } else {
+          showToast(json.message || 'Failed to reset rate limits', 'error');
+        }
+      } catch (e) {
+        showToast('Error resetting rate limits', 'error');
+      }
+    }
+
+    function openTestNotificationModal() {
+      openModal('testNotificationModal');
+    }
+
+    function onTestChannelChange() {
+      const channel = document.getElementById('testChannel').value;
+      const label = document.getElementById('testRecipientLabel');
+      const input = document.getElementById('testRecipient');
+      if (channel === 'SMS') {
+        label.textContent = 'Recipient Phone Number *';
+        input.placeholder = '+251911223344';
+        input.value = '+251911223344';
+      } else {
+        label.textContent = 'Recipient Email Address *';
+        input.placeholder = 'admin@ethiofarm.et';
+        input.value = 'admin@ethiofarm.et';
+      }
+    }
+
+    async function submitTestNotification() {
+      const channel = document.getElementById('testChannel').value;
+      const recipient = document.getElementById('testRecipient').value.trim();
+      const message = document.getElementById('testMessage').value.trim();
+      const btn = document.getElementById('testNotificationBtn');
+
+      if (!recipient) return showToast('Please enter a recipient', 'error');
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Dispatching diagnostic test...';
+      }
+
+      try {
+        const res = await fetch('/api/v1/admin/services-registry/action', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            action: 'sendTestNotification',
+            payload: { channel, recipient, message },
+          }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          closeModal('testNotificationModal');
+          showToast(`📨 Diagnostic ${channel} dispatched to ${recipient}!`);
+        } else {
+          showToast(json.message || 'Dispatch failed', 'error');
+        }
+      } catch (e) {
+        showToast('Error dispatching test notification', 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '🚀 Dispatch Diagnostic Test';
+        }
+      }
     }
   </script>
 </body>

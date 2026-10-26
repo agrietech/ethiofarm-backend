@@ -110,7 +110,9 @@ router.get(
  */
 router.get('/admin', authenticate, authorize('ADMIN', 'RESEARCHER'), async (req, res, next) => {
   try {
-    const dashboard = await adminDashboard.getAdminPanel(req.user.id, req.user);
+    const dashboard = req.user.role === 'RESEARCHER'
+      ? await adminDashboard.getResearchDashboard(req.user.id, req.user)
+      : await adminDashboard.getAdminPanel(req.user.id, req.user);
     res.json({ success: true, data: dashboard });
   } catch (error) {
     next(error);

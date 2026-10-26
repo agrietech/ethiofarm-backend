@@ -31,6 +31,13 @@ class AgentDashboardService {
       getScopedWeatherSummary({ kebeleId, woredaId, user }),
     ]);
 
+    const totalFarmersCount = farmers.length;
+    const totalFarmsCount = farmers.reduce((sum, f) => sum + (f.farms?.length || 0), 0);
+    const totalAreaHectares = farmers.reduce(
+      (sum, f) => sum + (f.farms?.reduce((fsum, farm) => fsum + (Number(farm.areaHectares) || 0), 0) || 0),
+      0
+    );
+
     const dashboard = {
       agentProfile: {
         userId,
@@ -41,6 +48,25 @@ class AgentDashboardService {
         scheduledVisitsToday: Math.min(farmers.length, 3),
         completedVisitsThisWeek: diagnoses.length,
         performanceScore: farmers.length > 0 ? 95 : 100,
+      },
+
+      // Jurisdiction and Farm Summary for Extension Hub views
+      jurisdiction: {
+        kebeleId: kebeleId || user.kebeleId,
+        kebeleName: user.kebeleName || (kebeleId ? `Kebele ${kebeleId}` : 'Local Kebele'),
+        woredaId: woredaId || user.woredaId,
+        woredaName: user.woredaName || (woredaId ? `Woreda ${woredaId}` : 'Local Woreda'),
+        totalFarmers: totalFarmersCount,
+        totalRegisteredFarmers: totalFarmersCount,
+        totalFarms: totalFarmsCount,
+        totalArea: parseFloat(totalAreaHectares.toFixed(2)),
+      },
+
+      farmSummary: {
+        totalFarms: totalFarmsCount,
+        totalArea: parseFloat(totalAreaHectares.toFixed(2)),
+        farmsAtRisk: 0,
+        activeSensors: 0,
       },
 
       // Assigned Farmers Roster
@@ -76,6 +102,18 @@ class AgentDashboardService {
         severity: d.severity,
         reportedAt: d.createdAt,
         status: 'ACTION_REQUIRED',
+      })),
+
+      recentDiagnoses: diagnoses.slice(0, 5).map((d) => ({
+        id: d.id,
+        crop: d.crop || d.farm?.primaryCrop || 'Crop',
+        diagnosis: d.diseaseName || d.diagnosis || 'Field Scouting',
+        diseaseName: d.diseaseName || d.diagnosis,
+        severity: d.severity || 'LOW',
+        status: d.status || 'RECORDED',
+        farmerName: d.farm?.user?.fullName || 'Local Farmer',
+        farmName: d.farm?.farmName,
+        createdAt: d.createdAt,
       })),
 
       // Active Emergency Alerts in Kebele

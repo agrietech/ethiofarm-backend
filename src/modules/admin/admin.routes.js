@@ -251,6 +251,12 @@ router.delete('/diagnoses/:id', adminAuth, controller.deleteDiagnosis);
 // System Health, Ingestion Trigger & Audit Logs
 router.get('/system/health', adminAuth, controller.getSystemHealth);
 router.get('/health', adminAuth, controller.getSystemHealth);
+router.get('/services-registry', adminAuth, controller.getServicesRegistry);
+router.get('/services', adminAuth, controller.getServicesRegistry);
+router.post('/services-registry/ping', adminAuth, controller.pingService);
+router.post('/services/ping', adminAuth, controller.pingService);
+router.post('/services-registry/action', adminAuth, controller.executeServiceAction);
+router.post('/services/action', adminAuth, controller.executeServiceAction);
 router.post('/ingestion/trigger', adminAuth, controller.triggerIngestion);
 router.get('/audit-logs', adminAuth, controller.getAuditLogs);
 router.post('/database/clean-test-data', adminAuth, requireAdmin, controller.cleanTestData);

@@ -182,10 +182,8 @@ app.use(
   })
 );
 
-// Global rate limiter
 app.use(globalLimiter);
 
-// Health check handlers
 const healthHandler = (_req, res) => {
   const memUsage = process.memoryUsage();
   const dbUp = isConnected();
@@ -224,19 +222,15 @@ const readinessHandler = (_req, res) => {
   });
 };
 
-// Health check – comprehensive (root & /api/v1)
 app.get('/health', healthHandler);
 app.get('/api/v1/health', healthHandler);
 
-// Liveness probe (root & /api/v1)
 app.get('/health/liveness', livenessHandler);
 app.get('/api/v1/health/liveness', livenessHandler);
 
-// Readiness probe (root & /api/v1)
 app.get('/health/readiness', readinessHandler);
 app.get('/api/v1/health/readiness', readinessHandler);
 
-// API root metadata
 app.get('/', (_req, res) => {
   res.status(200).json({
     success: true,
@@ -250,7 +244,6 @@ app.get('/', (_req, res) => {
   });
 });
 
-// API v1 root catalog index
 app.get('/api/v1', (_req, res) => {
   res.status(200).json({
     success: true,
@@ -288,7 +281,6 @@ app.get('/api/v1', (_req, res) => {
   });
 });
 
-// Web Admin Dashboard UI
 app.use('/admin', adminRoutes);
 
 // Top-level email verification and password reset handlers (for user-friendly links)
@@ -337,7 +329,6 @@ app.use('/api/v1/delivery/ussd', ussdLimiter, ussdRoutes);
 app.use('/api/v1/admin', adminRoutes);
 
 
-// 404 catch-all
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -348,7 +339,6 @@ app.use((req, res) => {
   });
 });
 
-// Global error handler
 app.use(errorHandler);
 
 module.exports = app;

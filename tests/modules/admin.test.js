@@ -138,5 +138,67 @@ describe('Admin Module & Operations Suite', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('text/html');
     expect(res.text).toMatch(/(?:EthioFarm|AgriEtech) \| Enterprise Admin/);
+    expect(res.text).toContain('API & Services Sentinel');
+  });
+
+  it('GET /api/v1/admin/services-registry - should return full microservices health matrix, host telemetry, env audit, and API catalog', async () => {
+    const res = await request(app).get('/api/v1/admin/services-registry');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.summary).toBeDefined();
+    expect(res.body.data.summary.totalServices).toBeGreaterThanOrEqual(10);
+    expect(Array.isArray(res.body.data.services)).toBe(true);
+    expect(res.body.data.hostTelemetry).toBeDefined();
+    expect(res.body.data.hostTelemetry.memory).toBeDefined();
+    expect(Array.isArray(res.body.data.environmentAudit)).toBe(true);
+    expect(Array.isArray(res.body.data.apiRouteCatalog)).toBe(true);
+
+    // Verify key external services are present in the matrix
+    const serviceIds = res.body.data.services.map(s => s.id);
+    expect(serviceIds).toContain('postgresql_postgis');
+    expect(serviceIds).toContain('open_meteo_weather');
+    expect(serviceIds).toContain('chirps_satellite_rainfall');
+    expect(serviceIds).toContain('nasa_power_climatology');
+    expect(serviceIds).toContain('openrouter_gemini_ai');
+    expect(serviceIds).toContain('sms_ethiopia_gateway');
+  });
+
+  it('POST /api/v1/admin/services-registry/ping - should ping a specific microservice', async () => {
+    const res = await request(app)
+      .post('/api/v1/admin/services-registry/ping')
+      .send({ serviceId: 'postgresql_postgis' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.serviceId).toBe('postgresql_postgis');
+    expect(res.body.data.status).toBe('OPERATIONAL');
+    expect(typeof res.body.data.latencyMs).toBe('number');
+  });
+
+  it('POST /api/v1/admin/services-registry/action - should execute purgeCache, clearRateLimits, and sendTestNotification', async () => {
+    // 1. Purge Cache
+    const purgeRes = await request(app)
+      .post('/api/v1/admin/services-registry/action')
+      .send({ action: 'purgeCache' });
+    expect(purgeRes.status).toBe(200);
+    expect(purgeRes.body.success).toBe(true);
+
+    // 2. Clear Rate Limits
+    const limitRes = await request(app)
+      .post('/api/v1/admin/services-registry/action')
+      .send({ action: 'clearRateLimits' });
+    expect(limitRes.status).toBe(200);
+    expect(limitRes.body.success).toBe(true);
+
+    // 3. Test Notification
+    const notifRes = await request(app)
+      .post('/api/v1/admin/services-registry/action')
+      .send({
+        action: 'sendTestNotification',
+        payload: { channel: 'SMS', recipient: '+251911223344' }
+      });
+    expect(notifRes.status).toBe(200);
+    expect(notifRes.body.success).toBe(true);
   });
 });

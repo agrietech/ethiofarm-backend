@@ -79,7 +79,7 @@ router.get('/:id', authenticate, controller.getFarmDetails);
 router.put(
   '/:id',
   authenticate,
-  authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'),
+  authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'),
   [
     body('farmName').optional().trim().notEmpty().withMessage('farmName cannot be empty').isLength({ max: 200 }),
     body('primaryCrop').optional().isString().trim().notEmpty(),
@@ -97,7 +97,7 @@ router.put(
 router.patch(
   '/:id',
   authenticate,
-  authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'),
+  authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'),
   [
     body('farmName').optional().trim().notEmpty().withMessage('farmName cannot be empty').isLength({ max: 200 }),
     body('primaryCrop').optional().isString().trim().notEmpty(),
@@ -123,7 +123,7 @@ router.get('/:id/analytics', authenticate, controller.authorizeFarmAccess, contr
 router.get('/:id/benchmarks', authenticate, controller.authorizeFarmAccess, controller.getFarmBenchmarks);
 
 // DELETE /api/v1/farms/:id – Delete a farm plot
-router.delete('/:id', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'), controller.deleteFarm);
+router.delete('/:id', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'), controller.deleteFarm);
 
 module.exports = router;
 
