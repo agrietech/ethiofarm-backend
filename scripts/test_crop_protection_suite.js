@@ -3,7 +3,15 @@
  * Tests full integration including camera/upload file attachments and base64 payloads
  */
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const app = require('../src/app');
+const env = require('../src/config/env');
+
+const testToken = jwt.sign(
+  { id: 'usr_test_da_01', email: 'da@ethiofarm.et', role: 'DEVELOPMENT_AGENT', woredaId: 'woreda_adama_01' },
+  env.JWT_SECRET,
+  { expiresIn: '1h' }
+);
 
 // 1x1 transparent JPEG test buffer
 const sampleImageBuffer = Buffer.from(
@@ -41,6 +49,7 @@ async function runCropProtectionVerification() {
     // Test standard JSON request
     const weedDetectRes = await request(app)
       .post('/api/v1/crop-protection/weed/detect')
+      .set('Authorization', `Bearer ${testToken}`)
       .send({ cropType: 'Wheat', areaHectares: 2.5 });
     assert('POST /weed/detect (JSON) returns 200', weedDetectRes.status === 200);
     assert('Detect provides calibrated knapsack plan', weedDetectRes.body?.data?.calibratedKnapsackSprayerPlan?.totalKnapsacksNeeded > 0);
@@ -49,6 +58,7 @@ async function runCropProtectionVerification() {
     // Test multipart image upload (Camera / Gallery simulation)
     const weedUploadRes = await request(app)
       .post('/api/v1/crop-protection/weed/detect')
+      .set('Authorization', `Bearer ${testToken}`)
       .attach('image', sampleImageBuffer, 'weed_sample.jpg')
       .field('cropType', 'Wheat')
       .field('areaHectares', '1.5');
@@ -58,6 +68,7 @@ async function runCropProtectionVerification() {
     // Test base64 payload upload
     const weedBase64Res = await request(app)
       .post('/api/v1/crop-protection/weed/detect')
+      .set('Authorization', `Bearer ${testToken}`)
       .send({ cropType: 'Teff', areaHectares: 1.0, imageBase64: sampleBase64 });
     assert('POST /weed/detect with Base64 payload returns 200', weedBase64Res.status === 200);
 
@@ -77,6 +88,7 @@ async function runCropProtectionVerification() {
 
     const nutScanRes = await request(app)
       .post('/api/v1/crop-protection/nutrient/scan')
+      .set('Authorization', `Bearer ${testToken}`)
       .send({ cropType: 'Maize', leafPosition: 'older', pattern: 'v_shaped' });
     assert('POST /nutrient/scan returns 200', nutScanRes.status === 200);
     assert('Detects Nitrogen deficiency from V-pattern', nutScanRes.body?.data?.diagnosedDeficiency?.id === 'nitrogen_deficiency');
@@ -85,6 +97,7 @@ async function runCropProtectionVerification() {
     // Test multipart image upload for nutrient scanner (Camera / Gallery simulation)
     const nutUploadRes = await request(app)
       .post('/api/v1/crop-protection/nutrient/scan')
+      .set('Authorization', `Bearer ${testToken}`)
       .attach('image', sampleImageBuffer, 'leaf_sample.jpg')
       .field('cropType', 'Maize')
       .field('leafPosition', 'older')
@@ -101,6 +114,7 @@ async function runCropProtectionVerification() {
     // Test ETL threshold calculation (25% damage > 20% early whorl threshold)
     const pestScoutRes = await request(app)
       .post('/api/v1/crop-protection/pest/scout')
+      .set('Authorization', `Bearer ${testToken}`)
       .send({ pestId: 'fall_armyworm', cropType: 'Maize', cropStage: 'seedling', observedDamagePercent: 25 });
     assert('POST /pest/scout returns 200', pestScoutRes.status === 200);
     assert('ETL indicates threshold exceeded (treat now)', pestScoutRes.body?.data?.economicThresholdEvaluation?.isAboveETL === true);
@@ -109,6 +123,7 @@ async function runCropProtectionVerification() {
     // Test multipart image upload for pest scout (Camera / Gallery simulation)
     const pestUploadRes = await request(app)
       .post('/api/v1/crop-protection/pest/scout')
+      .set('Authorization', `Bearer ${testToken}`)
       .attach('image', sampleImageBuffer, 'pest_sample.jpg')
       .field('pestId', 'fall_armyworm')
       .field('cropType', 'Maize')

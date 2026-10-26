@@ -32,7 +32,7 @@ ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 RUN apk add --no-cache curl wget
 
 # Pre-create uploads and runtime directories with node ownership
-RUN mkdir -p /app/uploads/diagnoses /app/uploads/audio /app/logs && chown -R node:node /app
+RUN mkdir -p /app/uploads/diagnose /app/uploads/diagnoses /app/uploads/audio /app/logs && chown -R node:node /app
 
 # Copy dependencies and generated prisma artifacts
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules

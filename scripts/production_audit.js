@@ -186,9 +186,10 @@ console.log('🔍 Phase 7: Documentation validation...\n');
 
 const docFiles = [
   'README.md',
-  'API_DOCUMENTATION.md',
-  'CONTRIBUTING.md',
+  'docs/README.md',
+  'docs/ARCHITECTURE.md',
   'docs/API_SPECIFICATION.md',
+  'firmware/README.md',
 ];
 
 docFiles.forEach(file => {

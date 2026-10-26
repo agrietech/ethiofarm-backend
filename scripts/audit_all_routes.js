@@ -194,9 +194,10 @@ async function runRouteAudit() {
   console.log('\n--- 3. ADMIN & RBAC PERMISSIONS ---');
   await testRoute({
     category: 'Admin',
-    name: 'Admin Dashboard HTML UI',
+    name: 'Admin Dashboard HTML UI (Admin Token)',
     method: 'GET',
     url: '/admin/dashboard',
+    token: adminToken,
     expectedStatuses: [200],
     desc: 'Serves glassmorphic operations console',
   });
