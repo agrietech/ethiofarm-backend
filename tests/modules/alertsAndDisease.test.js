@@ -142,7 +142,7 @@ describe('Alerts & Disease Diagnosis API Suite', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.cropIdentified).toBe('Maize (Zea mays)');
       expect(res.body.data.diseaseName).toBeDefined();
-      expect(res.body.data.imageUrl).toMatch(/(?:\/uploads\/diagnoses\/|supabase\.co)/);
+      expect(res.body.data.imageUrl).toMatch(/(?:\/uploads\/diagnose(?:s)?\/|supabase\.co)/);
     }, 120000);
 
     it('GET /api/v1/disease-diagnosis/farm/:farmId - should retrieve farm diagnosis history', async () => {

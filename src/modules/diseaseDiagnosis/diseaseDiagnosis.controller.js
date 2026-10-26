@@ -2,7 +2,8 @@ const diseaseService = require('./diseaseDiagnosis.service');
 
 async function diagnose(req, res, next) {
   try {
-    const { farmId, cropType, imageUrl, imageBase64, image, language, async: isAsync } = req.body;
+    const { farmId, cropType, cropHint, imageUrl, imageBase64, image, language, async: isAsync } = req.body;
+    const resolvedCrop = cropType || cropHint || undefined;
     const lang = language || req.query.lang || req.user?.preferredLang || 'en';
     const imageFile = req.file || null;
     const resolvedBase64 = imageBase64 || image || null;
@@ -13,7 +14,7 @@ async function diagnose(req, res, next) {
     if (shouldRunAsync) {
       const job = await diseaseService.submitAsyncDiagnosis({
         farmId,
-        cropType,
+        cropType: resolvedCrop,
         imageUrl,
         imageFile,
         imageBase64: resolvedBase64,
@@ -25,7 +26,7 @@ async function diagnose(req, res, next) {
 
     const data = await diseaseService.diagnoseCropImage({
       farmId,
-      cropType,
+      cropType: resolvedCrop,
       imageUrl,
       imageFile,
       imageBase64: resolvedBase64,
@@ -82,11 +83,23 @@ async function getDiagnosisById(req, res, next) {
   }
 }
 
+async function escalate(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const data = await diseaseService.escalateDiagnosis(id, notes, req.user);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   diagnose,
   getJobStatus,
   getAllDiagnoses,
   getDiagnosesByFarm,
   getDiagnosisById,
+  escalate,
 };
 

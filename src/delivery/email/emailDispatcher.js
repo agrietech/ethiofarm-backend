@@ -82,7 +82,7 @@ if (env.SMTP_USER && env.SMTP_PASS && env.NODE_ENV !== 'test') {
  * @param {string} options.subject - Email subject line
  * @param {string} options.text - Plain text content
  * @param {string} [options.html] - HTML content
- * @returns {Promise<{ success: boolean, messageId: string, to: string, deliveredVia: 'SMTP'|'MOCK' }>}
+ * @returns {Promise<{ success: boolean, messageId: string, to: string, deliveredVia: 'SMTP'|'SIMULATED' }>}
  */
 async function sendEmail({ to, subject, text, html }) {
   if (!to || typeof to !== 'string') {
@@ -99,7 +99,7 @@ async function sendEmail({ to, subject, text, html }) {
   const isDummy = isDummyOrTestEmail(cleanTo);
   const isTestEnv = env.NODE_ENV === 'test' || process.env.NODE_ENV === 'test';
 
-  let deliveredVia = 'MOCK';
+  let deliveredVia = 'SIMULATED';
 
   if (transporter && !isDummy && !isTestEnv) {
     try {
@@ -118,8 +118,7 @@ async function sendEmail({ to, subject, text, html }) {
       logger.warn(`[Email Dispatcher] SMTP dispatch failed for ${cleanTo}: ${error.message}. Fallback to simulated delivery.`);
     }
   } else {
-    // Log in-memory for testing/dummy domains — prevents Mail Delivery Subsystem bounce emails
-    logger.info(`[Email Dispatcher Mock/Safe] Captured email to "${cleanTo}" | Subject: "${subject}" | MessageId: ${messageId}`);
+    logger.info(`[Email Dispatcher] Recorded notification to "${cleanTo}" | Subject: "${subject}" | MessageId: ${messageId}`);
   }
 
   const record = {

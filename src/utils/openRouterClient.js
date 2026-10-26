@@ -950,7 +950,7 @@ JSON schema:
   /**
    * Helper to build enterprise role-calibrated directive for AI Agronomic Assistant
    */
-  _getRoleExpertDirective(userRole = 'FARMER', userJurisdiction = null, isAm = false) {
+  _getRoleExpertDirective(userRole = 'FARMER', userJurisdiction = null, _isAm = false) {
     const roleKey = (userRole || 'FARMER').toUpperCase().replace(/[-\s]/g, '_');
     const jurisdiction = userJurisdiction
       ? `\nJurisdiction Scope: ${[userJurisdiction.region, userJurisdiction.zone, userJurisdiction.woreda, userJurisdiction.kebele].filter(Boolean).join(' > ')}`
@@ -1013,11 +1013,12 @@ You are conversing with a practicing Ethiopian Farmer / Producer.
   }) {
     const textQuery = userQuestion || audioTranscript || 'የሰብል እንክብካቤ እና የበሽታ መከላከል መመሪያ ቢነግሩኝ?';
     const isAm = language === 'am' || /[\u1200-\u137F]/.test(textQuery);
+    const userInfo = userName ? `User: ${userName} (Role: ${userRole}).\n` : '';
     const farmInfo = farmContextSummary ? `The farmer's registered crops are: ${farmContextSummary}. Use this background when relevant.\n` : '';
     const roleDirective = this._getRoleExpertDirective(userRole, userJurisdiction, isAm);
 
     const systemPrompt = `You are EthioFarm's Chief Enterprise Agronomic AI Specialist and Voice Assistant for Ethiopian Agriculture.
-${farmInfo}${roleDirective}
+${userInfo}${farmInfo}${roleDirective}
 
 CORE DIRECTIVES:
 1. GREETINGS & SOCIAL ICEBREAKERS: For casual greetings (e.g., "hello", "hi", "selam", "ሰላም", "ጤና ይስጥልኝ"), reply warmly and courteously in both English and Amharic, acknowledging their operational role (${userRole}) and asking how you can assist their agricultural responsibilities today.

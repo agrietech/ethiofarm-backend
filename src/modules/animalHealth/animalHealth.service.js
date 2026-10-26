@@ -89,6 +89,13 @@ async function reportOutbreak({
   const resolvedDiseaseName = diseaseName || (diseaseInfo ? diseaseInfo.nameEn : 'Unknown Disease');
   const resolvedSeverity = severity || (diseaseInfo ? diseaseInfo.severity : 'MODERATE');
 
+  const combinedNotes = [
+    notes,
+    kebele ? `Reported from Kebele: ${kebele}` : null,
+    reporterPhone ? `Reporter Phone: ${reporterPhone}` : null,
+    quarantineStatus ? `Quarantine Status: ${quarantineStatus}` : null,
+  ].filter(Boolean).join(' | ') || null;
+
   const createdRecord = await prisma.animalDiseaseOutbreak.create({
     data: {
       woredaId: woreda ? woreda.id : (woredaId || 'woreda_adama_01'),
@@ -104,7 +111,7 @@ async function reportOutbreak({
       latitude: latitude ?? (woreda?.centerLat ?? 8.54),
       longitude: longitude ?? (woreda?.centerLng ?? 39.27),
       reportedBy: reportedBy || 'Field Officer',
-      notes: notes || (kebele ? `Reported from Kebele: ${kebele}` : null),
+      notes: combinedNotes,
     },
     include: {
       woreda: { select: { id: true, nameEn: true, nameAm: true, centerLat: true, centerLng: true } },

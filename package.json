@@ -20,6 +20,7 @@
     "backfill": "node scripts/backfillHistoricalWeather.js",
     "test": "jest --runInBand --forceExit",
     "test:smoke": "node scripts/smoke_test_services.js",
+    "test:roles": "node scripts/audit_roles_e2e.js",
     "make-admin": "node scripts/create_admin_user.js"
   },
   "dependencies": {

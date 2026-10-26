@@ -72,7 +72,7 @@ describe("Professional Email Dispatcher Suite", () => {
       });
 
       expect(res.success).toBe(true);
-      expect(res.deliveredVia).toBe("MOCK");
+      expect(res.deliveredVia).toBe("SIMULATED");
     });
   });
 });

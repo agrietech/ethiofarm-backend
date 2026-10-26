@@ -173,10 +173,6 @@ class PlantIdClient {
     };
   }
 
-  _generateMockBotanicalResult(cropHint = 'Wheat') {
-    return this._getLocalBotanicalResult(cropHint);
-  }
-
   _getLocalBotanicalResult(cropHint = 'Wheat') {
     const normalized = (cropHint || '').toUpperCase();
 

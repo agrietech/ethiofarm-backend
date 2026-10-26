@@ -5,6 +5,11 @@ const perenualClient = require('../../src/ingestion/perenualClient');
 jest.mock('axios');
 
 describe('Multi-Engine Botanical Clients Test Suite', () => {
+  beforeAll(() => {
+    plantNetClient.apiKey = 'valid_test_plantnet_key';
+    perenualClient.apiKey = 'valid_test_perenual_key';
+  });
+
   afterEach(() => {
     jest.clearAllMocks();
   });

@@ -1,6 +1,6 @@
 const farmsService = require('./farms.service');
 const { validateFarmData } = require('../../validation/schemas');
-const { UnauthorizedError, ForbiddenError } = require('../../utils/errors');
+const { UnauthorizedError } = require('../../utils/errors');
 const { assertResourceInScope } = require('../../middleware/scope-filter.utils');
 
 // Shared read authorization for all farm-derived data, including planning,

@@ -40,8 +40,8 @@ function getSecondsUntilNextHour() {
   const minutes = now.getMinutes();
   const seconds = now.getSeconds();
   const remainingSeconds = ((59 - minutes) * 60) + (60 - seconds);
-  // Keep cache TTL between 3 minutes (180s) and 30 minutes (1800s) to keep hourly telemetry fresh
-  return Math.max(180, Math.min(remainingSeconds, 1800));
+  // Keep cache TTL between 3 minutes (180s) and WEATHER_CACHE_TTL_SECONDS to keep hourly telemetry fresh
+  return Math.max(180, Math.min(remainingSeconds, WEATHER_CACHE_TTL_SECONDS));
 }
 
 /**

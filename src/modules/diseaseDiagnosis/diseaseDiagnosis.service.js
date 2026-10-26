@@ -646,6 +646,46 @@ async function getDiagnosisById(id, user) {
   return diagnosis;
 }
 
+/**
+ * Escalate a diagnosis to local Kebele Development Agent (DA) with field notes
+ */
+async function escalateDiagnosis(id, notes, user) {
+  const diagnosis = await getDiagnosisById(id, user);
+  const currentRaw = (diagnosis.rawResponse && typeof diagnosis.rawResponse === 'object') ? diagnosis.rawResponse : {};
+  const updatedRaw = {
+    ...currentRaw,
+    daEscalationStatus: 'ESCALATED',
+    daNotes: notes || '',
+    escalatedAt: new Date().toISOString(),
+    escalatedBy: user ? { id: user.id, name: user.fullName || user.email } : null,
+  };
+
+  const updated = await prisma.diseaseDiagnosis.update({
+    where: { id },
+    data: {
+      rawResponse: updatedRaw,
+    },
+    include: {
+      farm: {
+        select: {
+          id: true,
+          farmName: true,
+          primaryCrop: true,
+          userId: true,
+          woredaId: true,
+          kebeleId: true,
+        },
+      },
+    },
+  });
+
+  return {
+    ...updated,
+    daEscalationStatus: 'ESCALATED',
+    daNotes: notes || '',
+  };
+}
+
 module.exports = {
   diagnoseCropImage,
   submitAsyncDiagnosis,
@@ -653,6 +693,7 @@ module.exports = {
   getAllDiagnoses,
   getDiagnosesByFarm,
   getDiagnosisById,
+  escalateDiagnosis,
   getDiagnosisJobState,
 };
 
