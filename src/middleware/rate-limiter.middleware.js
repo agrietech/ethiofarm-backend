@@ -130,7 +130,6 @@ function handleMemoryRateLimit(key, now, windowMs) {
   return record.count;
 }
 
-// Preset rate limiters
 const globalLimiter = createRateLimiter({
   windowMs: 60 * 1000,
   max: 120,

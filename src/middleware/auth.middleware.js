@@ -13,7 +13,6 @@ function getAdminApiKeySet() {
   return new Set(raw.map((k) => k.trim()).filter(Boolean));
 }
 
-// Authenticate JWT bearer token or Admin API Key
 async function authenticate(req, res, next) {
   try {
     // 1. Admin API Key authentication — validated against ADMIN_API_KEYS
@@ -86,7 +85,6 @@ async function authenticate(req, res, next) {
   }
 }
 
-// Role-based access control check
 function authorize(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {
@@ -101,7 +99,6 @@ function authorize(...allowedRoles) {
   };
 }
 
-// Scope authorization to woreda
 function authorizeWoredaScope(paramName = 'woredaId') {
   return async (req, res, next) => {
     if (!req.user) {

@@ -38,7 +38,6 @@ function initRenderKeepAlive() {
   logger.info(`[Render Keep-Alive] Keep-alive pinger scheduled for ${targetUrl} (every 10 min)`);
 }
 
-// Start HTTP server with specific error handling
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     logger.error(`[EthioFarm] Port ${PORT} is already in use by another process. Please terminate the conflicting process or set a different PORT in .env`);
@@ -122,7 +121,6 @@ async function autoSyncAdminAccount() {
   }
 })();
 
-// Graceful Shutdown Handler
 let isShuttingDown = false;
 async function gracefulShutdown(signal) {
   if (isShuttingDown) return;
@@ -137,7 +135,6 @@ async function gracefulShutdown(signal) {
   forceTimeout.unref();
 
   try {
-    // 1. Stop accepting new HTTP connections
     await new Promise((resolve) => {
       server.close((err) => {
         if (err) logger.warn(`Error closing HTTP server: ${err.message}`);
@@ -146,17 +143,14 @@ async function gracefulShutdown(signal) {
     });
     logger.info('[EthioFarm] HTTP server closed');
 
-    // 2. Close BullMQ queues & workers
     await closeQueue();
     logger.info('[EthioFarm] Ingestion queues closed');
 
-    // 3. Disconnect Redis
     if (redis && redis.status === 'ready') {
       await redis.quit().catch(() => {});
       logger.info('[EthioFarm] Redis disconnected');
     }
 
-    // 4. Disconnect Prisma DB
     await disconnectDB();
     logger.info('[EthioFarm] Database disconnected');
 
@@ -171,7 +165,6 @@ async function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// Process error traps
 process.on('uncaughtException', (err) => {
   logger.error(`[FATAL] Uncaught Exception: ${err.message}`, { stack: err.stack });
   gracefulShutdown('uncaughtException');

@@ -1,6 +1,5 @@
 const logger = require('../utils/logger');
 
-// Global error handler
 function errorHandler(err, req, res, _next) {
   logger.error(`${req.method} ${req.originalUrl} - ${err.message}`);
 
@@ -78,7 +77,6 @@ function errorHandler(err, req, res, _next) {
     message = 'Authentication token is invalid or has expired.';
   }
 
-  // Default fallback error codes if not set
   if (!code) {
     code =
       statusCode === 409

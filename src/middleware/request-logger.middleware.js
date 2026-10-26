@@ -1,7 +1,6 @@
 const morgan = require('morgan');
 const logger = require('../utils/logger');
 
-// Sanitize sensitive fields from logging
 function sanitizeForLogging(obj) {
   if (!obj || typeof obj !== 'object') return obj;
   
@@ -20,7 +19,6 @@ function sanitizeForLogging(obj) {
   return sanitized;
 }
 
-// Custom token to sanitize request body
 morgan.token('sanitized-body', (req) => {
   if (req.body && Object.keys(req.body).length > 0) {
     return JSON.stringify(sanitizeForLogging(req.body));
@@ -28,7 +26,6 @@ morgan.token('sanitized-body', (req) => {
   return '-';
 });
 
-// Stream Morgan HTTP logs into Winston
 const stream = {
   write: (message) => logger.info(message.trim()),
 };
