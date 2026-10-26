@@ -1,6 +1,5 @@
 const adminService = require('./admin.service');
 const { assertResourceInScope } = require('../../middleware/scope-filter.utils');
-const logger = require('../../utils/logger');
 
 /**
  * Admin Controller - Professional Enterprise Dashboard
