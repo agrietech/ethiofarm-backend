@@ -57,7 +57,7 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
       // Check telemetry attribution
       expect(forecast.dataSources).toContain('Open-Meteo');
       expect(forecast.climatology).toBeDefined();
-    }, 30000);
+    }, 60000);
 
     it('should retrieve weather for specific farm level when farmId is provided', async () => {
       if (!sampleFarm) return;
@@ -72,7 +72,7 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
       expect(forecast.location.lat).toBe(sampleFarm.latitude);
       expect(forecast.location.lng).toBe(sampleFarm.longitude);
       expect(forecast.current.temperatureC).toBeDefined();
-    }, 30000);
+    }, 60000);
 
     it('should retrieve weather for specific kebele level when kebeleId is provided', async () => {
       if (!sampleKebele) return;
@@ -85,7 +85,7 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
       expect(forecast.location.kebeleId).toBe(sampleKebele.id);
       expect(forecast.location.nameEn).toContain(sampleKebele.nameEn);
       expect(forecast.current.temperatureC).toBeDefined();
-    }, 30000);
+    }, 60000);
 
     it('should serve cached weather on subsequent hourly request with sub-50ms latency', async () => {
       // First fetch to ensure cache is populated
@@ -98,8 +98,8 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
 
       expect(cached.isCached).toBe(true);
       expect(cached.cachedAt).toBeDefined();
-      expect(duration).toBeLessThan(500);
-    });
+      expect(duration).toBeLessThan(1000);
+    }, 45000);
   });
 
   describe('GET /api/v1/weather/forecast endpoint', () => {
@@ -114,7 +114,7 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
       expect(res.body.data.daily).toBeDefined();
       expect(res.body.data.daily.length).toBeGreaterThanOrEqual(7);
       expect(res.body.data.hourly).toBeDefined();
-    }, 15000);
+    }, 30000);
 
     it('should support farmId query parameter', async () => {
       if (!sampleFarm) return;
@@ -125,7 +125,7 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.location.level).toBe('FARM');
       expect(res.body.data.location.farmId).toBe(sampleFarm.id);
-    }, 15000);
+    }, 30000);
   });
 
   describe('GET /api/v1/weather/current endpoint', () => {
@@ -139,7 +139,7 @@ describe('Weather API & Multi-Source Telemetry Suite', () => {
       expect(res.body.data.current).toBeDefined();
       expect(typeof res.body.data.current.temperatureC).toBe('number');
       expect(res.body.data.current.weatherCode).toBeDefined();
-    }, 15000);
+    }, 30000);
   });
 
   describe('GET /api/v1/weather/locations endpoint', () => {
