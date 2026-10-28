@@ -86,7 +86,9 @@ app.use(
           'data:',
           'blob:',
           supabaseHost,
-          'https://*.tile.openstreetmap.org',
+          'https://*.google.com',
+          'https://*.googleapis.com',
+          'https://*.gstatic.com',
           'https://unpkg.com',
         ],
         mediaSrc: [
