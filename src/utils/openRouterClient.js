@@ -27,9 +27,11 @@ class OpenRouterClient {
     this.siteName = env.OPENROUTER_SITE_NAME || 'EthioFarm Smart Farming Platform';
 
     // Multi-Account Direct Google Gemini Pool (1,500 req/day per account)
-    this.geminiKeys = (env.GEMINI_API_KEYS_LIST && env.GEMINI_API_KEYS_LIST.length > 0)
+    // Validate that keys match authoritative Google AI Studio format (starting with AIzaSy)
+    const rawGeminiKeys = (env.GEMINI_API_KEYS_LIST && env.GEMINI_API_KEYS_LIST.length > 0)
       ? env.GEMINI_API_KEYS_LIST
       : (env.GEMINI_API_KEY ? [env.GEMINI_API_KEY] : []);
+    this.geminiKeys = rawGeminiKeys.filter((k) => typeof k === 'string' && k.startsWith('AIzaSy'));
     this.geminiApiKey = this.geminiKeys[0] || '';
     this.groqApiKey = process.env.GROQ_API_KEY || '';
 
@@ -90,8 +92,11 @@ class OpenRouterClient {
       keyObj.cooldownUntil = now + 60000; // 1-minute cooldown for rate limits
       logger.warn(`[OpenRouterClient] Gemini ${keyObj.id} (${keyObj.masked}) rate-limited (429/Quota). Cooldown 60s.`);
     } else if (statusCode === 401 || statusCode === 403) {
-      keyObj.cooldownUntil = now + 1800000; // 30-minute cooldown
+      keyObj.cooldownUntil = now + 1800000; // 30-minute cooldown for bad keys
       logger.error(`[OpenRouterClient] Gemini ${keyObj.id} (${keyObj.masked}) unauthorized (${statusCode}). Cooldown 30m.`);
+    } else if (statusCode === 404) {
+      // Model not found or deprecated: do not quarantine the API key
+      logger.warn(`[OpenRouterClient] Gemini ${keyObj.id} model availability warning (${statusCode}): ${errorMessage}`);
     }
   }
 
@@ -241,37 +246,36 @@ class OpenRouterClient {
 
     // 0. Direct Google Gemini Multi-Account Pool Integration (1,500 free requests/day per account)
     if (this.geminiKeyPool && this.geminiKeyPool.length > 0 && messages.length > 0) {
-      const geminiCandidateModels = ['gemini-flash-lite-latest', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
+      const geminiCandidateModels = ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'];
       const geminiContent = messages
         .map((m) => `${(m.role || 'user').toUpperCase()}: ${typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.map(c => c.text || '').filter(Boolean).join(' ') : JSON.stringify(m.content))}`)
         .join('\n\n');
 
-      const maxAttempts = Math.min(this.geminiKeyPool.length, 3);
+      const maxAttempts = Math.min(this.geminiKeyPool.length, 5);
       const geminiStartTime = Date.now();
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        if (Date.now() - geminiStartTime > 10000) break;
+        if (Date.now() - geminiStartTime > 28000) break;
         const keyObj = this._getNextGeminiKey();
         if (!keyObj || !keyObj.key) break;
 
         for (const gModel of geminiCandidateModels) {
-          if (Date.now() - geminiStartTime > 10000) break;
+          if (Date.now() - geminiStartTime > 28000) break;
           try {
             const geminiRes = await axios.post(
-              `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent`,
+              `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent?key=${encodeURIComponent(keyObj.key)}`,
               {
                 contents: [{ parts: [{ text: geminiContent }] }],
                 generationConfig: {
                   temperature,
-                  maxOutputTokens: Math.max(maxTokens, 1000),
+                  maxOutputTokens: Math.max(maxTokens, 1500),
                   ...(responseFormat === 'json' ? { responseMimeType: 'application/json' } : {}),
                 },
               },
               {
                 headers: {
-                  'x-goog-api-key': keyObj.key,
                   'Content-Type': 'application/json',
                 },
-                timeout: 6000,
+                timeout: 14000,
               }
             );
             const text = geminiRes.data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -287,7 +291,9 @@ class OpenRouterClient {
           } catch (geminiErr) {
             const statusCode = geminiErr.response?.status;
             const errMsg = geminiErr.response?.data?.error?.message || geminiErr.message;
-            this._markGeminiKeyError(keyObj, statusCode, errMsg);
+            if (statusCode !== 404) {
+              this._markGeminiKeyError(keyObj, statusCode, errMsg);
+            }
             logger.warn(`[OpenRouterClient] Direct Google Gemini (${gModel} - ${keyObj.id}) attempt notice: ${errMsg}`);
             const isTimeout = geminiErr.code === 'ECONNABORTED' || errMsg?.toLowerCase().includes('timeout');
             if (statusCode === 429 || isTimeout) {
@@ -605,8 +611,22 @@ class OpenRouterClient {
 Analyze the provided crop image alongside botanical diagnosis candidates from Plant.id, Pl@ntNet, and Perenual.
 You MUST output valid JSON ONLY with exact bilingual fields in English and Amharic (አማርኛ).
 
+CRITICAL EVALUATION RULES:
+1. If the image depicts a healthy plant/crop without active foliar lesions, rust pustules, blights, spots, or rot:
+   - "diseaseName": { "nameEn": "Healthy Plant / No Active Pathogen Detected", "nameAm": "ጤናማ ተክል / ምንም አይነት የበሽታ ምልክት አልተገኘም" }
+   - "pathogen": "None (Healthy specimen)"
+   - "severity": "LOW"
+   - "confidenceScore": 0.95
+2. If the image DOES NOT depict an agricultural crop, leaf, plant, or field (e.g. person, indoor room, car, animal, screen, text, or non-agricultural object):
+   - "unrecognized": true
+   - "diseaseName": { "nameEn": "Unrecognized Specimen / Non-Crop Object", "nameAm": "ተለይቶ ያልታወቀ / ሰብል ያልሆነ ነገር" }
+   - "pathogen": "N/A"
+   - "severity": "LOW"
+   - "confidenceScore": 0.1
+
 Required JSON format:
 {
+  "unrecognized": false,
   "cropIdentified": {
     "nameEn": "Wheat (Triticum aestivum)",
     "nameAm": "ስንዴ"
@@ -662,6 +682,7 @@ Required JSON format:
     if (this.geminiKeyPool && this.geminiKeyPool.length > 0) {
       const geminiVisionModels = [
         'gemini-flash-lite-latest',
+        'gemini-flash-latest',
         'gemini-3.5-flash-lite',
         'gemini-3.8-flash',
       ];
@@ -692,7 +713,7 @@ Perenual treatment knowledge: ${JSON.stringify(perenualData || {})}.`;
             }
 
             const geminiRes = await axios.post(
-              `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent`,
+              `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent?key=${encodeURIComponent(keyObj.key)}`,
               {
                 contents: [{ parts }],
                 generationConfig: {
@@ -703,10 +724,9 @@ Perenual treatment knowledge: ${JSON.stringify(perenualData || {})}.`;
               },
               {
                 headers: {
-                  'x-goog-api-key': keyObj.key,
                   'Content-Type': 'application/json',
                 },
-                timeout: 7000,
+                timeout: 12000,
               }
             );
 
@@ -805,11 +825,12 @@ Perenual treatment knowledge: ${JSON.stringify(perenualData || {})}.`,
       logger.warn(`[OpenRouterClient] OpenRouter vision completion notice: ${orErr.message}`);
     }
 
-    // 3. Fallback to Botanical Knowledge Synthesis Engine
+    // Strict live mode: do NOT return hardcoded mock or synthetic data
+    logger.warn('[OpenRouterClient] All vision models failed to produce analysis. Returning vision failure.');
     return {
-      success: true,
-      diagnosis: this._getBilingualSynthesizedDiagnosis(cropHint, plantIdData, plantNetData, perenualData),
-      rawContent: 'Synthesized via Kindwise Plant.id + Pl@ntNet + Perenual Agronomic Engine',
+      success: false,
+      error: 'VISION_AI_FAILED',
+      message: 'All alive vision models failed to produce a valid diagnosis. Check API keys and network connectivity.',
     };
   }
 
@@ -871,7 +892,7 @@ JSON schema:
       const parsed = JSON.parse(result.content.replace(/```json/g, '').replace(/```/g, '').trim());
       return { success: true, insights: parsed };
     } catch (_err) {
-      return { success: true, insights: this._getBilingualSynthesizedGraphInsights(woredaName, timeframe) };
+      throw new Error(`AI Graph Analysis failed to parse live model output: ${result.content?.substring(0, 100)}`);
     }
   }
 
@@ -1066,7 +1087,7 @@ CORE DIRECTIVES:
 
     return {
       success: true,
-      data: this._generateDynamicVoiceResponse(textQuery, language, userRole),
+      data: this._generateDynamicVoiceResponse(textQuery, language, userRole, userJurisdiction),
       isOfflineFallback: true,
       degradedReason: result?.degradedReason || 'Live AI rate limit reached; verified agronomic advisory engaged',
     };
@@ -1093,7 +1114,9 @@ CORE DIRECTIVES:
       const lang = /[\u1200-\u137F]/.test(queryText) ? 'am' : 'en';
       const roleMatch = text.match(/User Role:\s*([A-Z_]+)/i);
       const userRole = roleMatch ? roleMatch[1].toUpperCase() : 'FARMER';
-      const dynamicData = this._generateDynamicVoiceResponse(queryText, lang, userRole);
+      const jurisMatch = text.match(/Jurisdiction Scope:\s*([^\n\r]+)/i);
+      const userJurisdiction = jurisMatch ? { woreda: jurisMatch[1].trim() } : null;
+      const dynamicData = this._generateDynamicVoiceResponse(queryText, lang, userRole, userJurisdiction);
       return {
         success: true,
         content: JSON.stringify(dynamicData),
@@ -1125,32 +1148,75 @@ CORE DIRECTIVES:
    * Evaluates any farmer question dynamically and constructs scientifically verified,
    * localized Ethiopian agricultural advisory in both Amharic and English.
    */
-  _generateDynamicVoiceResponse(queryText = '', preferredLang = 'am', userRole = 'FARMER') {
+  _generateDynamicVoiceResponse(queryText = '', preferredLang = 'am', userRole = 'FARMER', userJurisdiction = null) {
     const cleanText = (queryText || '').replace(/\[farmer's crops:[^\]]*\]/gi, '').trim();
     const q = cleanText.toLowerCase();
     const isAmharicInput = /[\u1200-\u137F]/.test(cleanText);
     const detectedLang = isAmharicInput || preferredLang === 'am' ? 'Amharic' : 'English';
+    const roleKey = (userRole || 'FARMER').toUpperCase().replace(/[-\s]/g, '_');
+
+    const locParts = userJurisdiction
+      ? [userJurisdiction.kebele, userJurisdiction.woreda, userJurisdiction.zone, userJurisdiction.region].filter(Boolean)
+      : [];
+    const locScopeEn = locParts.length > 0 ? ` (${locParts.join(', ')})` : '';
+    const locScopeAm = locParts.length > 0 ? ` (${locParts.join('፣ ')})` : '';
 
     if (!q || q.length === 0) {
       return {
         transcription: detectedLang === 'Amharic' ? 'የድምፅ ጥያቄዎን ይጠብቃል' : 'Listening for your question',
         detectedLanguage: detectedLang,
-        responseEn: 'Hello! I am your EthioFarm AI Agronomic Assistant. How can I help you today with your crops, soil, pests, disease treatments, fertilizers, or weather forecasts?',
-        responseAm: 'ጤና ይስጥልኝ! እኔ የEthioFarm የግብርና AI ረዳትዎ ነኝ። ዛሬ ስለ ሰብልዎ፣ አፈር፣ ማዳበሪያ፣ ተባይና በሽታ መከላከል ወይም የአየር ሁኔታ በምን ልርዳዎ?',
+        responseEn: `Hello! I am your EthioFarm AI Agronomic Assistant${locScopeEn}. How can I assist you today with your crops, soil, pests, disease treatments, fertilizers, or weather forecasts?`,
+        responseAm: `ጤና ይስጥልኝ! እኔ የEthioFarm የግብርና AI ረዳትዎ ነኝ${locScopeAm}። ዛሬ ስለ ሰብልዎ፣ አፈር፣ ማዳበሪያ፣ ተባይና በሽታ መከላከል ወይም የአየር ሁኔታ በምን ልርዳዎ?`,
         recommendedAction: detectedLang === 'Amharic' ? 'ጥያቄዎን ይናገሩ ወይም ከታች ካሉት አማራጮች ይምረጡ።' : 'Speak your question or choose one of the quick topics below.',
       };
     }
 
-    // 1. Dedicated Social Greeting & Icebreaker Handler
+    // 1. Dedicated Social Greeting & Icebreaker Handler with Role & Location Intelligence
     const isGreeting = /^(hello|hi|hey|greetings|good\s*(morning|afternoon|evening)|selam|ሰላም|ደህና|ጤና\s*ይስጥልኝ)/i.test(q) ||
       ['hello', 'hi', 'hey', 'selam', 'ሰላም', 'ሰላም ነው', 'ጤና ይስጥልኝ', 'እንደምን አለህ', 'እንደምን አለሽ', 'እንደምን አደራችሁ', 'እንደምን ዋላችሁ'].includes(q);
 
     if (isGreeting) {
+      if (roleKey === 'DEVELOPMENT_AGENT') {
+        return {
+          transcription: cleanText,
+          detectedLanguage: detectedLang,
+          responseEn: `Hello Development Agent! I am your EthioFarm AI Extension Specialist${locScopeEn}. How can I assist your kebele demonstration plots, backpack sprayer calibrations, farmer training, or pest scouting thresholds today?`,
+          responseAm: `ጤና ይስጥልኝ የልማት ጣቢያ ባለሙያ (DA)! እኔ የEthioFarm AI የማስፋፊያ ረዳትዎ ነኝ${locScopeAm}። ዛሬ የቀበሌዎን ገበሬዎች ማሰልጠኛ፣ የማሳያ ማሳዎች አዘገጃጀት፣ የመርጫ ኬሚካል መጠን ወይም የተባይ ቁጥጥር በምን ላግዝዎ?`,
+          recommendedAction: detectedLang === 'Amharic' ? 'የቀበሌ ማሳያ ማሳዎች ወይም የተባይ መከላከያ ጥያቄዎን ይናገሩ።' : 'Ask about kebele demo plots, chemical calibration, or farmer training.',
+        };
+      }
+      if (['WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER'].includes(roleKey)) {
+        return {
+          transcription: cleanText,
+          detectedLanguage: detectedLang,
+          responseEn: `Hello Agricultural Officer! I am your EthioFarm AI Operational Specialist${locScopeEn}. How can I assist with your district input quotas, hazard early warnings, spatial cordons, or seasonal yield forecasts today?`,
+          responseAm: `ጤና ይስጥልኝ የግብርና ኃላፊ/ባለሙያ! እኔ የEthioFarm AI አስተዳደራዊ ረዳትዎ ነኝ${locScopeAm}። ዛሬ የወረዳ/የዞን ማዳበሪያና ምርጥ ዘር ስርጭት፣ የአደጋ ቅድመ ማስጠንቀቂያ ወይም የምርት ትንበያ በምን ልርዳዎ?`,
+          recommendedAction: detectedLang === 'Amharic' ? 'የስራ ወሰንዎን ግብዓት፣ የአደጋ ወይም የትንበያ ጥያቄ ይጠይቁ።' : 'Inquire about jurisdiction fertilizer quotas, hazard cordons, or yield estimates.',
+        };
+      }
+      if (roleKey === 'RESEARCHER') {
+        return {
+          transcription: cleanText,
+          detectedLanguage: detectedLang,
+          responseEn: `Hello Agronomy Researcher! I am your EthioFarm AI Scientific Assistant${locScopeEn}. How can I assist your varietal field trials, EthioSIS soil profiles, growing degree days, or phenological datasets today?`,
+          responseAm: `ጤና ይስጥልኝ የግብርና ተመራማሪ! እኔ የEthioFarm AI ሳይንሳዊ ረዳትዎ ነኝ${locScopeAm}። ስለ ዝርያ ሙከራዎች፣ አግሮ-ኢኮሎጂካዊ መረጃዎች፣ የሙቀት ድምር (GDD) ወይም አፈር ለምነት በምን ልርዳዎ?`,
+          recommendedAction: detectedLang === 'Amharic' ? 'ስለ ምርምር ሙከራዎች ወይም የአፈር መረጃ ይጠይቁ።' : 'Inquire about RCBD trial layout, GDD thermal units, or EthioSIS soil metrics.',
+        };
+      }
+      if (roleKey === 'ADMIN') {
+        return {
+          transcription: cleanText,
+          detectedLanguage: detectedLang,
+          responseEn: `Hello System Administrator! I am your EthioFarm AI Platform Specialist${locScopeEn}. How can I assist your telemetry feeds, observational cache sync, multi-hazard alerts, or platform governance today?`,
+          responseAm: `ጤና ይስጥልኝ የሲስተም አስተዳዳሪ! እኔ የEthioFarm AI የስርዓት ረዳትዎ ነኝ${locScopeAm}። የወረዳ ቴሌሜትሪ መረጃዎችን፣ የመረጃ ቋት ጤንነትና የአደጋ ቅድመ ማስጠንቀቂያ ስርዓት በምን ልርዳዎ?`,
+          recommendedAction: detectedLang === 'Amharic' ? 'የስርዓቱን ጤንነት ወይም የቴሌሜትሪ ሁኔታ ይመልከቱ።' : 'Check telemetry sync health or platform audit logs.',
+        };
+      }
       return {
         transcription: cleanText,
         detectedLanguage: detectedLang,
-        responseEn: 'Hello! I am your EthioFarm AI Agronomic Assistant. How can I assist you today with your crops, fruit trees, soil, pests, disease treatments, fertilizers, or weather forecast?',
-        responseAm: 'ጤና ይስጥልኝ! እኔ የEthioFarm የግብርና AI ረዳትዎ ነኝ። ዛሬ ስለ ሰብልዎ፣ አፈር፣ ማዳበሪያ፣ ተባይ መከላከል ወይም የአየር ሁኔታ በምን ላግዝዎ እችላለሁ?',
+        responseEn: `Hello! I am your EthioFarm AI Agronomic Assistant${locScopeEn}. How can I assist you today with your crops, fruit trees, soil, pests, disease treatments, fertilizers, or weather forecast?`,
+        responseAm: `ጤና ይስጥልኝ! እኔ የEthioFarm የግብርና AI ረዳትዎ ነኝ${locScopeAm}። ዛሬ ስለ ሰብልዎ፣ አፈር፣ ማዳበሪያ፣ ተባይ መከላከል ወይም የአየር ሁኔታ በምን ላግዝዎ እችላለሁ?`,
         recommendedAction: detectedLang === 'Amharic' ? 'የሚፈልጉትን የግብርና ጥያቄ ይናገሩ ወይም ይፃፉ።' : 'Speak or type any farming question to get instant advisory.',
       };
     }
@@ -1662,19 +1728,46 @@ CORE DIRECTIVES:
     }
 
     // Calibrate role-specific expert commentary (applies to ALL crop/topic branches)
-    const roleKey = (userRole || 'FARMER').toUpperCase().replace(/[-\s]/g, '_');
     if (roleKey === 'RESEARCHER') {
-      responseEn += `\n\n**🔬 Research Trial Benchmarks:**\n• Validate treatments via RCBD field replication. Benchmark against EthioSIS micro-nutrient datasets and Ethiopian Institute of Agricultural Research (EIAR) varietal release registers.`;
-      responseAm += `\n\n**🔬 የምርምርና የመስክ ሙከራ ማስታወሻ፡**\n• የግብርና ምርምር ሙከራዎችን በRCBD ዘዴ ይተግብሩ፤ ከኢትዮጵያ የግብርና ምርምር ኢንስቲትዩት (EIAR) የምርጥ ዘር ዝርዝር እና የአፈር ለምነት መረጃ (EthioSIS) ጋር ያገናዝቡ።`;
+      responseEn += `\n\n**🔬 Research Trial & Phenological Protocols${locScopeEn}:**\n` +
+        `• Trial Methodology: Implement 4-replication Randomized Complete Block Design (RCBD) across agro-ecological zones (AEZ: Dega, Weyna Dega, Kolla).\n` +
+        `• Varietal Release Standards: Benchmark against Ethiopian Institute of Agricultural Research (EIAR) registered cultivars for disease resistance genes (e.g., Sr2, Sr31 for stem rust).\n` +
+        `• Soil Diagnostics: Stratify treatments against EthioSIS micro-nutrient datasets (Boron, Zinc, Sulfur deficiency maps) and evaluate thermal accumulation via Growing Degree Days (GDD).`;
+      responseAm += `\n\n**🔬 የምርምርና የመስክ ሙከራ ሳይንሳዊ መመሪያ${locScopeAm}፡**\n` +
+        `• የመስክ ሙከራ ዘዴ፡ በ 4 ድግግሞሽ (4-replication RCBD) በተለያዩ የአየር ንብረት ቀጠናዎች (ደጋ፣ ወይና ደጋ፣ ቆላ) ሙከራዎችን ያከናውኑ።\n` +
+        `• የምርምር ዝርያዎች፡ ከኢትዮጵያ የግብርና ምርምር ኢንስቲትዩት (EIAR) የተመዘገቡ ዝርያዎች ጋር በማነጻጸር የበሽታ መቋቋም አቅምን ይለኩ።\n` +
+        `• የአፈር ንጥረ-ነገር፡ በአፈር ለምነት ካርታ (EthioSIS) መሰረት የቦሮን፣ ዚንክ እና ሰልፈር እጥረቶችን በሙከራው ውስጥ ያካትቱ።`;
     } else if (roleKey === 'DEVELOPMENT_AGENT') {
-      responseEn += `\n\n**🧑‍🌾 Kebele Extension Protocols:**\n• Demonstrate this agronomic procedure on kebele demonstration plots. Train local farmer development groups during scheduled community field days.`;
-      responseAm += `\n\n**🧑‍🌾 የልማት ጣቢያ (DA) የማስፋፊያ መመሪያ፡**\n• ይህንን የግብርና አሰራር በቀበሌው የማሳያ ማሳዎች ላይ በተግባር ለአርሶ አደሮች ያሳዩ፤ በማህበረሰብ የስልጠና መድረኮች ላይ ያጋሩ።`;
+      responseEn += `\n\n**🧑‍🌾 Kebele Extension & Demonstration Protocols${locScopeEn}:**\n` +
+        `• Demonstration Plot Setup: Establish a 20m × 20m split plot layout (farmer practice vs recommended package) to demonstrate visible yield differentials during community field days.\n` +
+        `• Knapsack Calibration: For 15L backpack sprayers, calibrate volume: use 25-30 mL/15L for Ampligo/Tilt or 50 g/15L for Mancozeb powder; ensure 4-bar uniform nozzle pressure.\n` +
+        `• Economic Threshold Levels (ETL): Initiate intervention when FAW whorl infestation exceeds 15% during vegetative stage, or when wheat rust pustules appear on >2% of leaf canopies.\n` +
+        `• Community Mobilization: Train 1-to-5 farmer development groups on timely weeding and safe chemical handling (PPE, pre-harvest interval compliance).`;
+      responseAm += `\n\n**🧑‍🌾 የልማት ጣቢያ (DA) የማስፋፊያና የማሳያ ማሳ መመሪያ${locScopeAm}፡**\n` +
+        `• የቀበሌ ማሳያ ማሳ (Demo Plot)፡ 20 በ 20 ሜትር የሙከራ ማሳ በማዘጋጀት የተሻሻለውንና የባህላዊውን አሰራር ልዩነት ለገበሬዎች በተግባር ያሳዩ።\n` +
+        `• የጀርባ መርጫ (15L Knapsack) መለኪያ፡ ለ 15 ሊትር ውሃ 30 ሚሊ ሊትር አምፕሊጎ ወይም 50 ግራም ማንኮዜብ በማስላት ንቦች በማይበሩበት በማለዳ ይርጩ።\n` +
+        `• የተባይ ክስተት ወሰን (ETL)፡ በበቆሎ ላይ የአባጨጓሬ ጉዳት ከ 15% በላይ ሲደርስ ወይም በስንዴ ላይ የዋግ ምልክት እንደታየ ፈጣን የኬሚካል መርጫ ያካሂዱ።\n` +
+        `• የአርሶ አደሮች ስልጠና፡ የአንድ ለአምስት የልማት ቡድኖችን በመሰብሰብ ስለ ወቅታዊ አረም ማረም እና ደህንነቱ የተጠበቀ የመድኃኒት አጠቃቀም ያስተምሩ።`;
     } else if (['WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER'].includes(roleKey)) {
-      responseEn += `\n\n**🏛️ District & Regional Coordination:**\n• Verify input allocations (NPS-B/Urea) and buffer seed stock availability for designated kebeles within your administrative jurisdiction.`;
-      responseAm += `\n\n**🏛️ አስተዳደራዊ ቅንጅትና ግብዓት ክትትል፡**\n• በስራ ወሰንዎ ውስጥ ለሚገኙ ቀበሌዎች የተመደበውን የማዳበሪያ (NPS-B/ዩሪያ) እና የምርጥ ዘር አቅርቦት ስርጭት መዝገብ ይከታተሉ።`;
+      responseEn += `\n\n**🏛️ District & Regional Operational Directive${locScopeEn}:**\n` +
+        `• Input Quota Allocation: Calculate woreda/zone input requirements using baseline: (Cereal Hectares × 100 kg NPS-B) + (Cereal Hectares × 100 kg Urea) + 10% contingency buffer reserve.\n` +
+        `• Spatial Quarantine Cordon: Impose a 5 km buffer radius containment perimeter around confirmed transboundary pest outbreaks (Desert Locust or severe Fall Armyworm clusters).\n` +
+        `• Watershed Vulnerability: Assess soil moisture saturation indices and coordinate with kebele DAs to reinforce flood diversion bunds in low-lying alluvial corridors.\n` +
+        `• Early Warning Synchronization: Transmit weekly crop stage and pest surveillance telemetry to the regional agricultural bureau command console.`;
+      responseAm += `\n\n**🏛️ የወረዳና የዞን ግብርና አመራር መመሪያ${locScopeAm}፡**\n` +
+        `• የግብዓት ኮታ ስሌት፡ ለእያንዳንዱ ሄክታር 100 ኪ.ግ NPS-B እና 100 ኪ.ግ ዩሪያ ከ 10% መጠባበቂያ ክምችት ጋር በማስላት ለማህበራት ያሰራጩ።\n` +
+        `• የአደጋ መከላከያ ክልል (Cordon)፡ አደገኛ የተባይ መንጋ (አንበጣ ወይም ተምች) በታየባቸው አካባቢዎች የ 5 ኪሎ ሜትር የክትትል ቀጠና ያቋቁሙ።\n` +
+        `• የውሃ ፍሳሽና ጎርፍ ጥበቃ፡ በደጋማና ወላካ አፈር ላይ የጎርፍ አደጋ እንዳይከሰት ከቀበሌ ልማት ጣቢያዎች ጋር በመቀናጀት የመከላከያ እርከኖችን ያጠናክሩ።\n` +
+        `• ቅድመ ማስጠንቀቂያ፡ ሳምንታዊ የሰብልና የተባይ ሁኔታ መረጃን ወደ ክልል የግብርና ቢሮ የክትትል ማዕከል ያስተላልፉ።`;
     } else if (roleKey === 'ADMIN') {
-      responseEn += `\n\n**🛡️ System Governance & Telemetry:**\n• Monitor woreda-level telemetry feeds and early-warning hazard indicators in the national governance console.`;
-      responseAm += `\n\n**🛡️ የስርዓት አስተዳደርና ክትትል፡**\n• የወረዳዎችን የቴሌሜትሪ መረጃዎችና የአደጋ ቅድመ ማስጠንቀቂያ አመልካቾችን በዋናው የአስተዳደር ገጽ ይከታተሉ።`;
+      responseEn += `\n\n**🛡️ System Governance & Observational Telemetry${locScopeEn}:**\n` +
+        `• Telemetry Pipeline Health: Validate ingestion pipelines (Open-Meteo, CHIRPS, and IoT agro-station telemetry) operating within 1-hour synchronization cycle.\n` +
+        `• Early Warning Sync: Ensure multi-hazard alert engine dispatches high-priority push notifications and USSD broadcasts without message queue backlog.\n` +
+        `• Role Scope Audit: Verify RBAC data isolation policies preventing cross-woreda telemetry leaks.`;
+      responseAm += `\n\n**🛡️ የስርዓት አስተዳደርና የቴሌሜትሪ ክትትል${locScopeAm}፡**\n` +
+        `• የዳታ ዝውውር ጤንነት፡ የአየር ሁኔታ፣ የሳተላይት እና የመስክ ሴንሰር መረጃዎች በየሰዓቱ ያለ መቆራረጥ መግባታቸውን ያረጋግጡ።\n` +
+        `• የአደጋ ማስጠንቀቂያ ስርዓት፡ ከፍተኛ አደጋዎች በአፋጣኝ ለተጠቃሚዎች በሞባይል ማሳወቂያ እና በUSSD መድረሳቸውን ይከታተሉ።\n` +
+        `• የተጠቃሚዎች ሚና ጥበቃ፡ እያንዳንዱ የስራ ሃላፊ በስራ ወሰኑ መሰረት መረጃ ማግኘቱንና የስርዓቱን ደህንነት ያረጋግጡ።`;
     }
 
     return {
