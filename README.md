@@ -1,4 +1,4 @@
-# AgriEtech Backend
+# EthioFarm Backend
 
 **Multi-Hazard Agricultural Early Warning & Planetary Intelligence Engine for Ethiopia**
 
@@ -13,7 +13,7 @@
 
 ## 🌟 Executive Overview
 
-**AgriEtech Backend** is an enterprise-grade agricultural early warning and geospatial analytics engine built for the sovereign agricultural territory of Ethiopia. It unifies Google Earth Engine multi-satellite compute, real-time USGS seismology fault modeling, RUSLE soil degradation equations, IoT sensor fleet telemetry, and automated multi-channel delivery via SMS notifications, character budgeting, and FCM push notifications.
+**EthioFarm Backend** is an enterprise-grade agricultural early warning and geospatial analytics engine built for the sovereign agricultural territory of Ethiopia. It unifies Google Earth Engine multi-satellite compute, real-time USGS seismology fault modeling, RUSLE soil degradation equations, IoT sensor fleet telemetry, and automated multi-channel delivery via SMS notifications, character budgeting, and FCM push notifications.
 
 ---
 

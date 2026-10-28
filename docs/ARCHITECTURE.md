@@ -1,8 +1,8 @@
-# AgriEtech Backend System Architecture
+# EthioFarm Backend System Architecture
 
 ## 1. Architectural Overview
 
-AgriEtech backend is built on an asynchronous, event-driven Node.js and Express architecture designed for high-throughput sensor telemetry ingestion, planetary satellite computing, and resilient multi-channel early warning dispatch.
+EthioFarm backend is built on an asynchronous, event-driven Node.js and Express architecture designed for high-throughput sensor telemetry ingestion, planetary satellite computing, and resilient multi-channel early warning dispatch.
 
 ---
 
