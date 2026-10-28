@@ -56,10 +56,12 @@ Target Ethiopian weeds include:
 - amaranthus_hybridus (Pigweed / ሊሻሊሾ)
 
 CRITICAL INSTRUCTIONS:
+- If the image DOES NOT depict an agricultural crop, leaf, plant, or field (e.g. human, room, object, surface): set "unrecognized": true, "detectedWeedId": "unrecognized".
 - If NO weeds are present or the field shows clean soil/foliage, set "detectedWeedId": "none", "severity": "LOW".
 - Output valid JSON ONLY with exact fields:
 {
-  "detectedWeedId": "parthenium_hysterophorus", // or one of the above, or "none" if no weed detected
+  "unrecognized": false,
+  "detectedWeedId": "parthenium_hysterophorus", // or one of the above, "unrecognized" if non-crop, or "none" if no weed detected
   "commonNameEn": "Parthenium / Famine Weed",
   "commonNameAm": "ኮንግን",
   "confidenceScore": 0.92,
@@ -92,12 +94,16 @@ CRITICAL INSTRUCTIONS:
     const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       aiIdentification = JSON.parse(jsonMatch[0]);
+      if (aiIdentification.unrecognized === true || aiIdentification.detectedWeedId === 'unrecognized') {
+        throw new BadRequestError('The uploaded photograph does not contain a recognizable agricultural field or weed specimen.', 'UNRECOGNIZED_CROP_IMAGE');
+      }
       if (aiIdentification.detectedWeedId && aiIdentification.detectedWeedId !== 'none') {
         const found = ETHIOPIAN_WEED_REGISTRY.find(w => w.id === aiIdentification.detectedWeedId);
         if (found) matchedWeed = found;
       }
     }
   } catch (aiErr) {
+    if (aiErr.code === 'UNRECOGNIZED_CROP_IMAGE') throw aiErr;
     logger.warn(`[CropProtectionService] Vision weed detection error: ${aiErr.message}`);
   }
 
@@ -401,10 +407,13 @@ Potential deficiencies:
 - iron_deficiency (Sharp interveinal chlorosis on youngest leaves, dark green veins)
 - sulfur_deficiency (Uniform pale yellow on youngest upper leaves)
 
-CRITICAL: If the leaf shows healthy uniform green pigmentation with no nutrient deficiency, set "detectedDeficiencyId": "none".
+CRITICAL:
+- If the image DOES NOT depict an agricultural crop leaf or plant (e.g. human, room, object, surface): set "unrecognized": true, "detectedDeficiencyId": "unrecognized".
+- If the leaf shows healthy uniform green pigmentation with no nutrient deficiency, set "detectedDeficiencyId": "none".
 Respond strictly in valid JSON format only:
 {
-  "detectedDeficiencyId": "nitrogen_deficiency", // or "none" if healthy
+  "unrecognized": false,
+  "detectedDeficiencyId": "nitrogen_deficiency", // or "none" if healthy, or "unrecognized" if non-crop
   "nutrientName": "Nitrogen (N)",
   "confidenceScore": 0.91,
   "affectedLeafArea": "older_leaves",
@@ -436,11 +445,15 @@ Respond strictly in valid JSON format only:
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         aiNotes = JSON.parse(jsonMatch[0]);
+        if (aiNotes.unrecognized === true || aiNotes.detectedDeficiencyId === 'unrecognized') {
+          throw new BadRequestError('The uploaded photograph does not contain a recognizable agricultural leaf specimen.', 'UNRECOGNIZED_CROP_IMAGE');
+        }
         if (aiNotes.detectedDeficiencyId && aiNotes.detectedDeficiencyId !== 'none') {
           matchedDeficiency = NUTRIENT_DEFICIENCIES.find(d => d.id === aiNotes.detectedDeficiencyId);
         }
       }
     } catch (aiErr) {
+      if (aiErr.code === 'UNRECOGNIZED_CROP_IMAGE') throw aiErr;
       logger.warn(`[CropProtectionService] Vision nutrient deficiency scan error: ${aiErr.message}`);
     }
 
@@ -498,7 +511,7 @@ Respond strictly in valid JSON format only:
  */
 async function scoutPest({ imageBase64: rawBase64, imageUrl, imageFile, pestId = null, cropType = 'Maize', cropStage = 'midWhorl', observedDamagePercent = 0, infestedPlantsCount = null, totalSampledPlants = 100, _language = 'en' }) {
   const base64Data = resolveBase64(imageFile, rawBase64);
-  let resolvedPestId = pestId || null;
+  let resolvedPestId = (base64Data || imageUrl) ? null : (pestId || null);
   let aiPestDetection = null;
 
   if (base64Data || (imageUrl && imageUrl.startsWith('http'))) {
@@ -513,10 +526,13 @@ Target Ethiopian pests:
 - maize_stem_borer (Busseola fusca)
 - coffee_berry_borer (Hypothenemus hampei)
 
-CRITICAL: If NO insect pests or significant pest feeding damage are visible in the image, set "detectedPestId": "none".
+CRITICAL:
+- If the image DOES NOT depict an agricultural crop, leaf, or plant (e.g. human, room, object, surface): set "unrecognized": true, "detectedPestId": "unrecognized".
+- If NO insect pests or significant pest feeding damage are visible in the image, set "detectedPestId": "none".
 Respond strictly in valid JSON format only:
 {
-  "detectedPestId": "fall_armyworm", // or one of the above, or "none" if clean
+  "unrecognized": false,
+  "detectedPestId": "fall_armyworm", // or one of the above, "none" if clean, or "unrecognized" if non-crop
   "scientificName": "Spodoptera frugiperda",
   "commonNameEn": "Fall Armyworm",
   "confidenceScore": 0.93,
@@ -548,11 +564,15 @@ Respond strictly in valid JSON format only:
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         aiPestDetection = JSON.parse(jsonMatch[0]);
+        if (aiPestDetection.unrecognized === true || aiPestDetection.detectedPestId === 'unrecognized') {
+          throw new BadRequestError('The uploaded photograph does not contain a recognizable agricultural crop or plant specimen.', 'UNRECOGNIZED_CROP_IMAGE');
+        }
         if (aiPestDetection.detectedPestId && aiPestDetection.detectedPestId !== 'none') {
           resolvedPestId = aiPestDetection.detectedPestId;
         }
       }
     } catch (aiErr) {
+      if (aiErr.code === 'UNRECOGNIZED_CROP_IMAGE') throw aiErr;
       logger.warn(`[CropProtectionService] Vision pest scout error: ${aiErr.message}`);
     }
 
