@@ -83,6 +83,12 @@ class OfficerDashboardService {
 
       // Farm distribution and agro-ecological health
       farmDistribution,
+      farmAnalytics: {
+        totalFarms: farmDistribution.total || farmsCount.count || 0,
+        atRisk: farmDistribution.atRiskCount || 0,
+        totalAreaHectares: farmDistribution.totalArea || farmsCount.totalArea || 0,
+        cropDistribution: farmDistribution.byCrop || [],
+      },
 
       // Sensor Network Telemetry Status
       sensorNetwork: sensorStats,
@@ -198,6 +204,12 @@ class OfficerDashboardService {
       },
       riskMap: riskStats,
       farmDistribution,
+      farmAnalytics: {
+        totalFarms: farmDistribution.total || farmsCount.count || 0,
+        atRisk: farmDistribution.atRiskCount || 0,
+        totalAreaHectares: farmDistribution.totalArea || farmsCount.totalArea || 0,
+        cropDistribution: farmDistribution.byCrop || [],
+      },
       sensorNetwork: sensorStats,
       developmentAgents,
       quickActions: [
@@ -293,6 +305,12 @@ class OfficerDashboardService {
       },
       riskMap: riskStats,
       farmDistribution,
+      farmAnalytics: {
+        totalFarms: farmDistribution.total || farmsCount.count || 0,
+        atRisk: farmDistribution.atRiskCount || 0,
+        totalAreaHectares: farmDistribution.totalArea || farmsCount.totalArea || 0,
+        cropDistribution: farmDistribution.byCrop || [],
+      },
       sensorNetwork: sensorStats,
       developmentAgents,
       quickActions: [
