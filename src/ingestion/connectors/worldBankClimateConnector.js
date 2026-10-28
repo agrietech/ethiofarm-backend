@@ -50,12 +50,12 @@ const worldBankClimateConnector = {
       }
 
       // 2. Query Live Authoritative ERA5 Historical Reanalysis Climatology Archive
-      const sYear = startYear || 2015;
       const currentYear = new Date().getFullYear();
+      const sYear = Math.max(startYear || 2022, 2021);
       const eYear = Math.min(endYear || 2024, currentYear - 1);
       const url = `https://archive-api.open-meteo.com/v1/archive?latitude=9.03&longitude=38.74&start_date=${sYear}-01-01&end_date=${eYear}-12-31&daily=temperature_2m_mean&timezone=Africa%2FAddis_Ababa`;
       
-      const response = await axios.get(url, { httpsAgent, timeout: 15000 });
+      const response = await axios.get(url, { httpsAgent, timeout: 5000 });
       const daily = response.data?.daily;
 
       if (daily && Array.isArray(daily.time)) {
@@ -146,12 +146,12 @@ const worldBankClimateConnector = {
         }
       }
 
-      const sYear = startYear || 2015;
       const currentYear = new Date().getFullYear();
+      const sYear = Math.max(startYear || 2022, 2021);
       const eYear = Math.min(endYear || 2024, currentYear - 1);
       const url = `https://archive-api.open-meteo.com/v1/archive?latitude=9.03&longitude=38.74&start_date=${sYear}-01-01&end_date=${eYear}-12-31&daily=precipitation_sum&timezone=Africa%2FAddis_Ababa`;
       
-      const response = await axios.get(url, { httpsAgent, timeout: 15000 });
+      const response = await axios.get(url, { httpsAgent, timeout: 5000 });
       const daily = response.data?.daily;
 
       if (daily && Array.isArray(daily.time)) {
