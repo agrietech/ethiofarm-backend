@@ -38,7 +38,7 @@ describe('Dual-AI Crop Disease Diagnosis Suite (Plant.id + Gemini 2.5 Flash)', (
     expect(diag.symptomsAm).toBeDefined();
     expect(diag.preventionAm).toBeDefined();
     expect(diag.aiModel).toContain('Gemini');
-  }, 60000);
+  }, 90000);
 
   it('should retrieve all historical diagnoses', async () => {
     const res = await request(app)

@@ -29,7 +29,7 @@ describe('AI Voice & Speech Processing Suite (Amharic & English)', () => {
     expect(res.body.responseEn).toBeDefined();
     expect(res.body.audioSynthesis).toBeDefined();
     expect(res.body.audioSynthesis.voiceAmharic).toBeDefined();
-  });
+  }, 90000);
 
   it('should process farmer voice inquiry in English', async () => {
     const res = await request(app)
@@ -44,7 +44,7 @@ describe('AI Voice & Speech Processing Suite (Amharic & English)', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.responseEn).toBeDefined();
     expect(res.body.responseAm).toBeDefined();
-  });
+  }, 90000);
 
   it('should generate text-to-speech audio metadata for Amharic text', async () => {
     const res = await request(app)
