@@ -3,7 +3,7 @@ const logger = require('../../utils/logger');
 const openRouterClient = require('../../utils/openRouterClient');
 const { prisma, isConnected } = require('../../config/db');
 const { getWeatherForecast } = require('../weather/weather.service');
-const { ForbiddenError } = require('../../utils/errors');
+const { ForbiddenError, BadRequestError, ServiceUnavailableError } = require('../../utils/errors');
 const { buildFarmScope } = require('../../middleware/scope-filter.utils');
 
 const { ETHIOPIAN_WEED_REGISTRY, calculateKnapsackDosage } = require('./weedDatabase');
@@ -36,25 +36,30 @@ function resolveBase64(imageFile, rawBase64) {
  */
 async function detectWeed({ imageBase64: rawBase64, imageUrl, imageFile, cropType = 'Wheat', areaHectares = 1.0, _language = 'en' }) {
   const base64Data = resolveBase64(imageFile, rawBase64);
-  let matchedWeed = ETHIOPIAN_WEED_REGISTRY[0]; // Default Parthenium
+  if (!base64Data && (!imageUrl || !imageUrl.startsWith('http'))) {
+    throw new BadRequestError('An image file or valid base64 image data is required to perform weed detection.', 'IMAGE_REQUIRED');
+  }
+
+  let matchedWeed = null;
   let aiIdentification = null;
 
-  if (base64Data || (imageUrl && imageUrl.startsWith('http'))) {
-    logger.info(`[CropProtectionService] Invoking AI vision for weed detection on crop="${cropType}"`);
-    try {
-      const prompt = `You are an expert Ethiopian agronomist and weed scientist working with EIAR and Ministry of Agriculture.
+  logger.info(`[CropProtectionService] Invoking AI vision for weed detection on crop="${cropType}"`);
+  try {
+    const prompt = `You are an expert Ethiopian agronomist and weed scientist working with EIAR and Ministry of Agriculture.
 Analyze this field photograph to detect weed species infesting the crop field.
 Target Ethiopian weeds include:
-- Parthenium hysterophorus (Kongn / ኮንግን)
-- Striga hermonthica (Akenchira / አከንችራ)
-- Avena fatua (Wild oat / ሙጃ)
-- Phalaris paradoxa (Canary grass / ድንጋይ ሳር)
-- Datura stramonium (Jimsonweed / አስቴር)
-- Amaranthus hybridus (Pigweed / ሊሻሊሾ)
+- parthenium_hysterophorus (Parthenium / Famine Weed / ኮንግን)
+- striga_hermonthica (Witchweed / Akenchira / አከንችራ)
+- avena_fatua (Wild oat / ሙጃ)
+- phalaris_paradoxa (Canary grass / ድንጋይ ሳር)
+- datura_stramonium (Jimsonweed / አስቴር)
+- amaranthus_hybridus (Pigweed / ሊሻሊሾ)
 
-Respond strictly in valid JSON format only:
+CRITICAL INSTRUCTIONS:
+- If NO weeds are present or the field shows clean soil/foliage, set "detectedWeedId": "none", "severity": "LOW".
+- Output valid JSON ONLY with exact fields:
 {
-  "detectedWeedId": "parthenium_hysterophorus", // one of: parthenium_hysterophorus, striga_hermonthica, avena_fatua, phalaris_paradoxa, datura_stramonium, amaranthus_hybridus
+  "detectedWeedId": "parthenium_hysterophorus", // or one of the above, or "none" if no weed detected
   "commonNameEn": "Parthenium / Famine Weed",
   "commonNameAm": "ኮንግን",
   "confidenceScore": 0.92,
@@ -63,36 +68,63 @@ Respond strictly in valid JSON format only:
   "visualEvidence": "Dissected leaves with small white flower clusters growing aggressively between crop rows."
 }`;
 
-      const aiResponse = await openRouterClient.chatCompletion({
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              ...(base64Data ? [{
-                type: 'image_url',
-                image_url: { url: `data:image/jpeg;base64,${base64Data}` }
-              }] : [{
-                type: 'image_url',
-                image_url: { url: imageUrl }
-              }])
-            ]
-          }
-        ],
-        temperature: 0.1,
-        maxTokens: 500
-      });
+    const aiResponse = await openRouterClient.chatCompletion({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            ...(base64Data ? [{
+              type: 'image_url',
+              image_url: { url: `data:image/jpeg;base64,${base64Data}` }
+            }] : [{
+              type: 'image_url',
+              image_url: { url: imageUrl }
+            }])
+          ]
+        }
+      ],
+      temperature: 0.1,
+      maxTokens: 500
+    });
 
-      const rawContent = aiResponse.choices?.[0]?.message?.content || '';
-      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        aiIdentification = JSON.parse(jsonMatch[0]);
+    const rawContent = aiResponse.content || aiResponse.choices?.[0]?.message?.content || '';
+    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      aiIdentification = JSON.parse(jsonMatch[0]);
+      if (aiIdentification.detectedWeedId && aiIdentification.detectedWeedId !== 'none') {
         const found = ETHIOPIAN_WEED_REGISTRY.find(w => w.id === aiIdentification.detectedWeedId);
         if (found) matchedWeed = found;
       }
-    } catch (aiErr) {
-      logger.warn(`[CropProtectionService] Vision weed detection error: ${aiErr.message}`);
     }
+  } catch (aiErr) {
+    logger.warn(`[CropProtectionService] Vision weed detection error: ${aiErr.message}`);
+  }
+
+  // If clean field or no weeds detected
+  if (aiIdentification && (aiIdentification.detectedWeedId === 'none' || !matchedWeed)) {
+    return {
+      success: true,
+      detectionType: 'AI_MULTIMODAL_VISION',
+      aiConfidence: aiIdentification.confidenceScore ?? 0.95,
+      weed: null,
+      infestingCrop: cropType,
+      fieldAreaHectares: parseFloat(areaHectares) || 1.0,
+      status: 'CLEAN_FIELD_NO_WEED_DETECTED',
+      messageEn: 'No noxious weed infestation detected in the provided field photograph. Field appears clear of competitive weeds.',
+      messageAm: 'በቀረበው የምስል ቅኝት ላይ ምንም አይነት አደገኛ አረም አልተገኘም። እርሻው ከአረም ንጹህ ነው።',
+      recommendedHerbicides: [],
+      calibratedKnapsackSprayerPlan: null,
+      culturalControls: ['Maintain regular scouting along field borders and implement shallow inter-row cultivation.'],
+      safetyAdvisoryEn: 'No herbicide intervention required at this time.',
+      safetyAdvisoryAm: 'በአሁኑ ወቅት ምንም አይነት ፀረ-አረም ኬሚካል መርጨት አያስፈልግም።',
+    };
+  }
+
+  if (!matchedWeed) {
+    throw new ServiceUnavailableError('AI Weed Vision Classification service is temporarily unavailable. No mock weed data will be returned.', {
+      code: 'AI_VISION_UNAVAILABLE',
+    });
   }
 
   // Filter herbicides that are selective / safe for the specified crop
@@ -114,7 +146,7 @@ Respond strictly in valid JSON format only:
 
   return {
     success: true,
-    detectionType: aiIdentification ? 'AI_MULTIMODAL_VISION' : 'AGRONOMIC_REGISTRY_MATCH',
+    detectionType: 'AI_MULTIMODAL_VISION',
     aiConfidence: aiIdentification?.confidenceScore ?? 0.94,
     weed: {
       id: matchedWeed.id,
@@ -344,10 +376,17 @@ async function evaluateSprayWindow({ latitude, longitude, farmId = null, user = 
 /**
  * 4. Visual Leaf Nutrient Deficiency Scanner
  */
-async function scanNutrientDeficiency({ imageBase64: rawBase64, imageUrl, imageFile, cropType = 'Maize', leafPosition = 'older', pattern = 'v_shaped', soilPh = 6.5, _language = 'en' }) {
+async function scanNutrientDeficiency({ imageBase64: rawBase64, imageUrl, imageFile, cropType = 'Maize', leafPosition = null, pattern = null, soilPh = 6.5, _language = 'en' }) {
   const base64Data = resolveBase64(imageFile, rawBase64);
   let matchedDeficiency = null;
   let aiNotes = null;
+
+  if (!base64Data && (!imageUrl || !imageUrl.startsWith('http')) && !leafPosition && !pattern) {
+    throw new BadRequestError(
+      'Either a clear leaf photograph or specific foliar deficiency symptom observations (leaf position and chlorosis pattern) are required to perform nutrient deficiency scanning.',
+      'IMAGE_OR_SYMPTOMS_REQUIRED'
+    );
+  }
 
   if (base64Data || (imageUrl && imageUrl.startsWith('http'))) {
     logger.info(`[CropProtectionService] Running visual nutrient deficiency scanner for crop="${cropType}"`);
@@ -362,9 +401,10 @@ Potential deficiencies:
 - iron_deficiency (Sharp interveinal chlorosis on youngest leaves, dark green veins)
 - sulfur_deficiency (Uniform pale yellow on youngest upper leaves)
 
+CRITICAL: If the leaf shows healthy uniform green pigmentation with no nutrient deficiency, set "detectedDeficiencyId": "none".
 Respond strictly in valid JSON format only:
 {
-  "detectedDeficiencyId": "nitrogen_deficiency",
+  "detectedDeficiencyId": "nitrogen_deficiency", // or "none" if healthy
   "nutrientName": "Nitrogen (N)",
   "confidenceScore": 0.91,
   "affectedLeafArea": "older_leaves",
@@ -392,19 +432,41 @@ Respond strictly in valid JSON format only:
         maxTokens: 500
       });
 
-      const rawContent = aiResponse.choices?.[0]?.message?.content || '';
+      const rawContent = aiResponse.content || aiResponse.choices?.[0]?.message?.content || '';
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         aiNotes = JSON.parse(jsonMatch[0]);
-        matchedDeficiency = NUTRIENT_DEFICIENCIES.find(d => d.id === aiNotes.detectedDeficiencyId);
+        if (aiNotes.detectedDeficiencyId && aiNotes.detectedDeficiencyId !== 'none') {
+          matchedDeficiency = NUTRIENT_DEFICIENCIES.find(d => d.id === aiNotes.detectedDeficiencyId);
+        }
       }
     } catch (aiErr) {
       logger.warn(`[CropProtectionService] Vision nutrient deficiency scan error: ${aiErr.message}`);
     }
-  }
 
-  // Fallback to agronomic rules if AI was offline or no image provided
-  if (!matchedDeficiency) {
+    if (aiNotes && (aiNotes.detectedDeficiencyId === 'none' || !matchedDeficiency)) {
+      return {
+        success: true,
+        scanType: 'AI_MULTIMODAL_LEAF_SCAN',
+        confidenceScore: aiNotes.confidenceScore ?? 0.95,
+        cropType,
+        diagnosedDeficiency: null,
+        status: 'ADEQUATE_PLANT_NUTRITION',
+        messageEn: 'Leaf tissue exhibits uniform green pigmentation and balanced nutritional vigor. No acute nutrient deficiency detected.',
+        messageAm: 'የተክሉ ቅጠል ጤናማ አረንጓዴ ቀለም ያሳያል፤ ምንም አይነት የንጥረ-ነገር እጥረት አልተገኘም።',
+        correctiveAction: null,
+        applicationSummaryEn: 'Maintain recommended seasonal NPS-B and Urea split schedules.',
+        applicationSummaryAm: 'መደበኛውን የNPS-B እና የዩሪያ ማዳበሪያ አጠቃቀም ይቀጥሉ።',
+      };
+    }
+
+    if (!matchedDeficiency) {
+      throw new ServiceUnavailableError('AI Nutrient Leaf Vision Model is currently unavailable. No mock deficiency data will be returned.', {
+        code: 'AI_VISION_UNAVAILABLE',
+      });
+    }
+  } else {
+    // When no image is provided, evaluate manual agronomic symptoms
     const result = diagnoseDeficiencySymptoms({ leafPosition, pattern, soilPh, cropType });
     matchedDeficiency = result.diagnosedDeficiency;
   }
@@ -412,7 +474,7 @@ Respond strictly in valid JSON format only:
   return {
     success: true,
     scanType: aiNotes ? 'AI_MULTIMODAL_LEAF_SCAN' : 'AGRONOMIC_LEAF_SYMPTOM_ANALYSIS',
-    confidenceScore: aiNotes?.confidenceScore ?? 0.92,
+    confidenceScore: aiNotes?.confidenceScore ?? 0.85,
     cropType,
     diagnosedDeficiency: {
       id: matchedDeficiency.id,
@@ -434,9 +496,9 @@ Respond strictly in valid JSON format only:
 /**
  * 5. Insect Pest Scout & Economic Threshold (ETL) Evaluator
  */
-async function scoutPest({ imageBase64: rawBase64, imageUrl, imageFile, pestId = null, cropType = 'Maize', cropStage = 'midWhorl', observedDamagePercent = 15, infestedPlantsCount = null, totalSampledPlants = 100, _language = 'en' }) {
+async function scoutPest({ imageBase64: rawBase64, imageUrl, imageFile, pestId = null, cropType = 'Maize', cropStage = 'midWhorl', observedDamagePercent = 0, infestedPlantsCount = null, totalSampledPlants = 100, _language = 'en' }) {
   const base64Data = resolveBase64(imageFile, rawBase64);
-  let resolvedPestId = pestId || 'fall_armyworm';
+  let resolvedPestId = pestId || null;
   let aiPestDetection = null;
 
   if (base64Data || (imageUrl && imageUrl.startsWith('http'))) {
@@ -451,9 +513,10 @@ Target Ethiopian pests:
 - maize_stem_borer (Busseola fusca)
 - coffee_berry_borer (Hypothenemus hampei)
 
+CRITICAL: If NO insect pests or significant pest feeding damage are visible in the image, set "detectedPestId": "none".
 Respond strictly in valid JSON format only:
 {
-  "detectedPestId": "fall_armyworm",
+  "detectedPestId": "fall_armyworm", // or one of the above, or "none" if clean
   "scientificName": "Spodoptera frugiperda",
   "commonNameEn": "Fall Armyworm",
   "confidenceScore": 0.93,
@@ -481,17 +544,51 @@ Respond strictly in valid JSON format only:
         maxTokens: 500
       });
 
-      const rawContent = aiResponse.choices?.[0]?.message?.content || '';
+      const rawContent = aiResponse.content || aiResponse.choices?.[0]?.message?.content || '';
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         aiPestDetection = JSON.parse(jsonMatch[0]);
-        if (aiPestDetection.detectedPestId) {
+        if (aiPestDetection.detectedPestId && aiPestDetection.detectedPestId !== 'none') {
           resolvedPestId = aiPestDetection.detectedPestId;
         }
       }
     } catch (aiErr) {
       logger.warn(`[CropProtectionService] Vision pest scout error: ${aiErr.message}`);
     }
+
+    if (aiPestDetection && aiPestDetection.detectedPestId === 'none') {
+      return {
+        success: true,
+        scoutMethod: 'AI_MULTIMODAL_PEST_SCOUT',
+        aiConfidence: aiPestDetection.confidenceScore ?? 0.95,
+        cropType,
+        pest: null,
+        status: 'CLEAN_NO_PESTS_DETECTED',
+        messageEn: 'No active insect pest infestation or foliar feeding damage detected in specimen photo.',
+        messageAm: 'በቀረበው ፎቶ ላይ ምንም አይነት የተባይ ወረርሽኝ ወይም የቅጠል ጉዳት አልተገኘም።',
+        economicThresholdEvaluation: {
+          isAboveETL: false,
+          actionRequired: false,
+          recommendation: {
+            en: 'Pest population is at baseline zero. Continue routine weekly field scouting; no insecticide intervention required.',
+            am: 'የተባይ መጠኑ ዜሮ ነው። መደበኛ ሳምንታዊ ክትትልዎን ይቀጥሉ፤ ፀረ-ተባይ ኬሚካል መርጨት አያስፈልግም።',
+          },
+        },
+        scoutResult: {
+          actionRecommended: 'NO_INTERVENTION_NEEDED',
+        },
+      };
+    }
+
+    if (!resolvedPestId) {
+      throw new ServiceUnavailableError('AI Pest Scouting Vision Model is currently unavailable. No mock pest data will be returned.', {
+        code: 'AI_VISION_UNAVAILABLE',
+      });
+    }
+  }
+
+  if (!resolvedPestId) {
+    throw new BadRequestError('A field photograph or specific pest identifier is required to perform pest scouting.', 'PEST_OR_IMAGE_REQUIRED');
   }
 
   // Calculate Economic Threshold Analysis
