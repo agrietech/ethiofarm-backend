@@ -1,6 +1,8 @@
 const weatherService = require('../weather/weather.service');
 const { prisma, isConnected } = require('../../config/db');
+const { getWoredaCoordinates } = require('../boundaries/boundaries.service');
 const openRouterClient = require('../../utils/openRouterClient');
+const { ServiceUnavailableError } = require('../../utils/errors');
 
 const getDynamicFallbackSummary = async () => {
   let farmCount = 0;
@@ -700,7 +702,6 @@ async function getRegionalBreakdown(regionId = null) {
 // Multi-horizon temporal trends with live location-specific weather
 async function getTemporalTrends({ timeframe = 'DAILY', woredaId, includeAi = false, language = 'am' }) {
   const axios = require('axios');
-  const { getWoredaCoordinates } = require('../boundaries/boundaries.service');
   const normTimeframe = (timeframe || 'DAILY').toUpperCase();
   const coords = await getWoredaCoordinates(woredaId);
 
@@ -1367,7 +1368,6 @@ async function getAgronomicAdvisories({ cropType = 'WHEAT', season = 'MEHER', wo
   const crop = (cropType || 'WHEAT').toUpperCase();
   const seasonName = (season || 'MEHER').toUpperCase();
 
-  const { getWoredaCoordinates } = require('../boundaries/boundaries.service');
   const coords = await getWoredaCoordinates(woredaId);
 
   // 1. Fetch live active alerts for this woreda to detect active pest/disease/drought emergencies
@@ -1386,7 +1386,7 @@ async function getAgronomicAdvisories({ cropType = 'WHEAT', season = 'MEHER', wo
   let upcomingRainMm = 0;
   let maxForecastTemp = 24;
   try {
-    const weatherForecast = await weatherService.getWeatherForecast({ lat: coords.lat, lng: coords.lng, days: 3 });
+    const weatherForecast = await weatherService.getWeatherForecast({ woredaId: coords.id || woredaId, lat: coords.lat, lng: coords.lng, days: 3 });
     const dailyForecast = weatherForecast?.daily || [];
     upcomingRainMm = dailyForecast.reduce((sum, d) => sum + (d.precipitationMm || 0), 0);
     maxForecastTemp = Math.max(...dailyForecast.map(d => d.maxTempC || 24), 24);
@@ -1537,26 +1537,12 @@ async function getAiInsights({ woredaId, timeframe = 'DAILY', language = 'am', m
       timeframe,
       aiInsights: aiResult.insights,
     };
-  } catch (_err) {
-    return {
-      woredaId: woredaId || 'woreda_adama_01',
-      timeframe,
-      aiInsights: {
-        trendSummary: {
-          en: 'Rainfall has stabilized across monitored plots with healthy NDVI indices.',
-          am: 'በተከታተልናቸው እርሻዎች ላይ የዝናብ መጠኑ የተረጋጋ ሲሆን የሰብል ጤንነትም በጥሩ ደረጃ ላይ ይገኛል።',
-        },
-        droughtRiskStatus: {
-          status: 'NORMAL',
-          en: 'Normal conditions observed.',
-          am: 'መደበኛ የአየር ሁኔታ።',
-        },
-        actionableGuidance: {
-          en: ['Maintain standard mulching.'],
-          am: ['የአፈር እርጥበትን ለመጠበቅ መደበኛ የገለባ ጎዝጓዝ ይጠቀሙ።'],
-        },
-      },
-    };
+  } catch (err) {
+    const { ServiceUnavailableError } = require('../../utils/errors');
+    throw new ServiceUnavailableError(
+      'AI agro-climatic analytics service is currently unavailable or unconfigured. Alive trend synthesis requires an active AI model. Please verify API credentials.',
+      { code: 'AI_ANALYTICS_UNAVAILABLE', details: err.message }
+    );
   }
 }
 
@@ -1663,7 +1649,7 @@ async function getLocationAnalytics(userId) {
 
 async function getRegionMap(regionId) {
   if (!isConnected()) {
-    return { error: 'Database not connected', fallback: true };
+    throw new ServiceUnavailableError('Database service is currently unavailable. Real-time GIS polygon map data could not be retrieved.', { code: 'DATABASE_UNAVAILABLE' });
   }
 
   try {
@@ -1853,7 +1839,7 @@ async function getRegionAnalytics(regionId) {
 
 async function getZoneMap(zoneId) {
   if (!isConnected()) {
-    return { error: 'Database not connected', fallback: true };
+    throw new ServiceUnavailableError('Database service is currently unavailable. Real-time GIS polygon map data could not be retrieved.', { code: 'DATABASE_UNAVAILABLE' });
   }
 
   try {
@@ -2031,7 +2017,7 @@ async function getZoneAnalytics(zoneId) {
 
 async function getWoredaMap(woredaId) {
   if (!isConnected()) {
-    return { error: 'Database not connected', fallback: true };
+    throw new ServiceUnavailableError('Database service is currently unavailable. Real-time GIS polygon map data could not be retrieved.', { code: 'DATABASE_UNAVAILABLE' });
   }
 
   try {

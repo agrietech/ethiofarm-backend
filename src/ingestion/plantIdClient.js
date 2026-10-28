@@ -26,8 +26,8 @@ class PlantIdClient {
    */
   async identifyCropHealth({ imageBase64, imageUrl, cropHint }) {
     if (!this.isConfigured()) {
-      logger.info('[PlantIdClient] PLANT_ID_API_KEY not configured. Utilizing local botanical database.');
-      return this._getLocalBotanicalResult(cropHint);
+      logger.info('[PlantIdClient] PLANT_ID_API_KEY not configured. Skipping external Plant.id lookup.');
+      return { success: false, reason: 'NOT_CONFIGURED', diseases: [] };
     }
 
     try {
@@ -38,14 +38,14 @@ class PlantIdClient {
       // If imageUrl provided without base64, fetch buffer and encode
       if (!base64Data && imageUrl && imageUrl.startsWith('http')) {
         if (imageUrl.includes('storage.agrietech.et') || imageUrl.includes('example.com') || imageUrl.includes('test.local')) {
-          logger.info(`[PlantIdClient] Placeholder/test image URL (${imageUrl}) detected; utilizing local botanical taxonomy.`);
-          return this._getLocalBotanicalResult(cropHint);
+          logger.info(`[PlantIdClient] Placeholder/test image URL (${imageUrl}) detected; skipping external lookup.`);
+          return { success: false, reason: 'PLACEHOLDER_IMAGE', diseases: [] };
         }
         try {
           const imgResponse = await axios.get(imageUrl, {
             responseType: 'arraybuffer',
             headers: { 'User-Agent': 'EthioFarm-BotanicalClient/1.0' },
-            timeout: process.env.NODE_ENV === 'test' ? 1500 : 8000,
+            timeout: 2500,
           });
           base64Data = Buffer.from(imgResponse.data).toString('base64');
         } catch (_fetchErr) {
@@ -58,8 +58,8 @@ class PlantIdClient {
         : imageUrl;
 
       if (!formattedImage) {
-        logger.info('[PlantIdClient] No image provided for identification; utilizing local botanical taxonomy.');
-        return this._getLocalBotanicalResult(cropHint);
+        logger.info('[PlantIdClient] No image provided for identification.');
+        return { success: false, reason: 'NO_IMAGE', diseases: [] };
       }
 
       const isV3 = this.apiUrl.includes('v3') || !this.apiUrl.includes('v2');
@@ -77,14 +77,12 @@ class PlantIdClient {
           classification_level: 'species',
         };
 
-        const requestTimeout = process.env.NODE_ENV === 'test' ? 3000 : 15000;
-
         const response = await axios.post(targetUrl, payload, {
           headers: {
             'Api-Key': this.apiKey,
             'Content-Type': 'application/json',
           },
-          timeout: requestTimeout,
+          timeout: 2500,
         });
 
         return this._parsePlantIdV3Response(response.data, cropHint);
@@ -102,19 +100,17 @@ class PlantIdClient {
           disease_details: ['cause', 'common_names', 'description', 'treatment'],
         };
 
-        const requestTimeout = process.env.NODE_ENV === 'test' ? 3000 : 15000;
-
         const response = await axios.post(targetUrl, payload, {
           headers: { 'Content-Type': 'application/json' },
-          timeout: requestTimeout,
+          timeout: 2500,
         });
 
         return this._parsePlantIdV2Response(response.data, cropHint);
       }
     } catch (error) {
       const msg = error.response?.data?.message || error.response?.data?.error || error.message;
-      logger.error(`[PlantIdClient] API call failed: ${msg}. Fallback to local botanical knowledge.`);
-      return this._getLocalBotanicalResult(cropHint);
+      logger.warn(`[PlantIdClient] API call notice: ${msg}`);
+      return { success: false, error: msg, diseases: [] };
     }
   }
 
@@ -170,89 +166,6 @@ class PlantIdClient {
         treatment: d.disease_details?.treatment || {},
       })),
       rawPayload: data,
-    };
-  }
-
-  _getLocalBotanicalResult(cropHint = 'Wheat') {
-    const normalized = (cropHint || '').toUpperCase();
-
-    if (normalized.includes('MAIZE') || normalized.includes('CORN')) {
-      return {
-        success: true,
-        source: 'LOCAL_BOTANICAL_DATABASE',
-        apiVersion: 'local',
-        crop: {
-          scientificName: 'Zea mays',
-          commonNames: ['Maize', 'Corn', 'በቆሎ'],
-          probability: 0.96,
-        },
-        isHealthy: false,
-        isHealthyProbability: 0.04,
-        diseases: [
-          {
-            name: 'Fall Armyworm (Spodoptera frugiperda)',
-            probability: 0.91,
-            cause: 'Insect pest larva',
-            description: 'Larvae feed on leaf whorls and reproductive parts of maize.',
-          },
-          {
-            name: 'Maize Lethal Necrosis (MLN)',
-            probability: 0.72,
-            cause: 'Viral synergistic complex',
-            description: 'Chlorotic mottling of leaves and premature drying.',
-          },
-        ],
-      };
-    }
-
-    if (normalized.includes('TEFF')) {
-      return {
-        success: true,
-        source: 'LOCAL_BOTANICAL_DATABASE',
-        apiVersion: 'local',
-        crop: {
-          scientificName: 'Eragrostis tef',
-          commonNames: ['Teff', 'ጤፍ'],
-          probability: 0.95,
-        },
-        isHealthy: false,
-        isHealthyProbability: 0.08,
-        diseases: [
-          {
-            name: 'Teff Rust (Uromyces eragrostidis)',
-            probability: 0.88,
-            cause: 'Fungal spores',
-            description: 'Causes rust pustules on stems and leaf sheaths of teff.',
-          },
-        ],
-      };
-    }
-
-    return {
-      success: true,
-      source: 'LOCAL_BOTANICAL_DATABASE',
-      apiVersion: 'local',
-      crop: {
-        scientificName: 'Triticum aestivum',
-        commonNames: ['Common Wheat', 'Wheat', 'ስንዴ'],
-        probability: 0.97,
-      },
-      isHealthy: false,
-      isHealthyProbability: 0.03,
-      diseases: [
-        {
-          name: 'Stem Rust / Black Rust (Puccinia graminis)',
-          probability: 0.94,
-          cause: 'Fungal pathogen Puccinia graminis',
-          description: 'Destructive fungal rust infecting wheat stems and leaves across high altitudes.',
-        },
-        {
-          name: 'Stripe Rust / Yellow Rust (Puccinia striiformis)',
-          probability: 0.78,
-          cause: 'Fungal pathogen',
-          description: 'Yellow stripes along leaf veins in cooler highland environments.',
-        },
-      ],
     };
   }
 }

@@ -84,18 +84,20 @@ async function registerSensor({
     throw new NotFoundError(`Farm with ID ${targetFarmId} not found`);
   }
 
-  // Jurisdictional / Ownership Authorization
+  // Ownership & Super Admin Authorization
   if (callerRole === 'FARMER' && farm.userId !== callerId) {
     throw new ForbiddenError('Access denied: You can only register sensors for your own farm');
   }
-  if ((callerRole === 'DEVELOPMENT_AGENT' || callerRole === 'WOREDA_OFFICER') && user?.woredaId && farm.woredaId !== user.woredaId) {
-    throw new ForbiddenError('Access denied: Farmer/farm is outside your woreda jurisdiction');
+  if (callerRole === 'DEVELOPMENT_AGENT') {
+    if (user?.kebeleId && farm.kebeleId && farm.kebeleId !== user.kebeleId) {
+      throw new ForbiddenError('Access denied: Farmer/farm is outside your kebele jurisdiction');
+    }
+    if (user?.woredaId && farm.woredaId !== user.woredaId) {
+      throw new ForbiddenError('Access denied: Farmer/farm is outside your woreda jurisdiction');
+    }
   }
-  if (callerRole === 'ZONAL_OFFICER' && user?.zoneId && farm.woreda?.zoneId !== user.zoneId) {
-    throw new ForbiddenError('Access denied: Farmer/farm is outside your zone jurisdiction');
-  }
-  if (callerRole === 'REGIONAL_OFFICER' && user?.regionId && farm.woreda?.zone?.regionId !== user.regionId) {
-    throw new ForbiddenError('Access denied: Farmer/farm is outside your region jurisdiction');
+  if (['WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'RESEARCHER'].includes(callerRole)) {
+    throw new ForbiddenError('Access denied: Officers have read/monitoring access only. Sensor provisioning requires a Development Agent, Farm Owner, or Super Admin');
   }
 
   // Check if sensor with this hardwareId already exists: update and reassign to this farmer's farm
@@ -407,20 +409,22 @@ async function updateSensor({ id, data = {}, user = {}, clientUpdatedAt }) {
     throw new NotFoundError(`Sensor with ID ${id} not found`);
   }
 
-  // 1. Ownership & Jurisdictional Authorization
+  // 1. Ownership & Super Admin Authorization
   const role = (user.role || 'FARMER').toUpperCase();
   if (role !== 'ADMIN') {
     if (role === 'FARMER' && existing.farm.userId !== user.id) {
       throw new ForbiddenError('Access denied: You can only update sensors on your own farms');
     }
-    if ((role === 'DEVELOPMENT_AGENT' || role === 'WOREDA_OFFICER') && user.woredaId && existing.farm.woredaId !== user.woredaId) {
-      throw new ForbiddenError('Access denied: Sensor is outside your woreda jurisdiction');
+    if (role === 'DEVELOPMENT_AGENT') {
+      if (user.kebeleId && existing.farm.kebeleId && existing.farm.kebeleId !== user.kebeleId) {
+        throw new ForbiddenError('Access denied: Sensor is outside your kebele jurisdiction');
+      }
+      if (user.woredaId && existing.farm.woredaId !== user.woredaId) {
+        throw new ForbiddenError('Access denied: Sensor is outside your woreda jurisdiction');
+      }
     }
-    if (role === 'ZONAL_OFFICER' && user.zoneId && existing.farm.woreda?.zoneId !== user.zoneId) {
-      throw new ForbiddenError('Access denied: Sensor is outside your zone jurisdiction');
-    }
-    if (role === 'REGIONAL_OFFICER' && user.regionId && existing.farm.woreda?.zone?.regionId !== user.regionId) {
-      throw new ForbiddenError('Access denied: Sensor is outside your region jurisdiction');
+    if (['WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'RESEARCHER'].includes(role)) {
+      throw new ForbiddenError('Access denied: Officers have read/monitoring access only. Sensor modification requires Super Admin, assigned Development Agent, or Farm Owner');
     }
   }
 

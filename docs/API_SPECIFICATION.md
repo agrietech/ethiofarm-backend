@@ -1,7 +1,7 @@
-# AgriEtech Multi-Hazard Early Warning Platform - API Specification
+# EthioFarm Multi-Hazard Early Warning Platform - API Specification
 
 **Version:** 1.0.0  
-**Base URL:** `http://localhost:5000/api/v1` (Production: `https://agrietech.onrender.com/api/v1`)  
+**Base URL:** `http://localhost:5000/api/v1` (Production: `https://ethiofarm.onrender.com/api/v1`)  
 **Format:** JSON (`Content-Type: application/json`)  
 **Authentication:** HTTP Bearer Token (`Authorization: Bearer <jwt_token>`)
 
@@ -79,7 +79,7 @@ All API endpoints return standard JSON envelopes:
 - **Request Body:**
   ```json
   {
-    "email": "abebe@agrietech.et",
+    "email": "abebe@ethiofarm.et",
     "fullName": "Abebe Bikila",
     "password": "SecurePassword123!",
     "phoneNumber": "+251911223344",
@@ -106,7 +106,7 @@ All API endpoints return standard JSON envelopes:
     "data": {
       "user": {
         "id": "usr_78912",
-        "email": "abebe@agrietech.et",
+        "email": "abebe@ethiofarm.et",
         "fullName": "Abebe Bikila",
         "phoneNumber": "+251911223344",
         "role": "FARMER",
@@ -131,7 +131,7 @@ All API endpoints return standard JSON envelopes:
 - **Request Body:**
   ```json
   {
-    "email": "abebe@agrietech.et",
+    "email": "abebe@ethiofarm.et",
     "password": "SecurePassword123!"
   }
   ```
@@ -152,7 +152,7 @@ All API endpoints return standard JSON envelopes:
       "refreshToken": "ref_9823471928374",
       "user": {
         "id": "usr_78912",
-        "email": "abebe@agrietech.et",
+        "email": "abebe@ethiofarm.et",
         "fullName": "Abebe Bikila",
         "phoneNumber": "+251911223344",
         "role": "FARMER",
@@ -187,7 +187,7 @@ All API endpoints return standard JSON envelopes:
 - **Method:** `POST /api/v1/auth/forgot-password`
 - **Auth:** Public
 - **Description:** Request a password reset email. A secure reset link is sent to the user's email.
-- **Request Body:** `{"email": "abebe@agrietech.et"}`
+- **Request Body:** `{"email": "abebe@ethiofarm.et"}`
 - **Response (200 OK):**
   ```json
   {
@@ -236,7 +236,7 @@ All API endpoints return standard JSON envelopes:
 - **Method:** `POST /api/v1/auth/resend-verification`
 - **Auth:** Public
 - **Description:** Resend email verification link if user didn't receive it or it expired.
-- **Request Body:** `{"email": "abebe@agrietech.et"}`
+- **Request Body:** `{"email": "abebe@ethiofarm.et"}`
 - **Response (200 OK):**
   ```json
   {
@@ -267,7 +267,7 @@ All API endpoints return standard JSON envelopes:
       "id": "usr_78912",
       "fullName": "Abebe Bikila",
       "phoneNumber": "+251911223344",
-      "email": "farmer@agrietech.et",
+      "email": "farmer@ethiofarm.et",
       "role": "FARMER",
       "preferredLang": "am",
       "woreda": {
@@ -447,7 +447,7 @@ All API endpoints return standard JSON envelopes:
       "id": "req_123456",
       "status": "APPROVED",
       "reviewedById": "usr_reviewer",
-      "reviewedByName": "admin@agrietech.et",
+      "reviewedByName": "admin@ethiofarm.et",
       "reviewedAt": "2026-08-21T17:00:00.000Z"
     }
   }
@@ -485,7 +485,7 @@ All API endpoints return standard JSON envelopes:
       "status": "REJECTED",
       "rejectionReason": "Staff ID verification failed with Woreda HR.",
       "reviewedById": "usr_reviewer",
-      "reviewedByName": "woreda.officer@agrietech.et",
+      "reviewedByName": "woreda.officer@ethiofarm.et",
       "reviewedAt": "2026-08-21T17:15:00.000Z"
     }
   }

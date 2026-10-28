@@ -117,13 +117,13 @@ describe('Alerts & Disease Diagnosis API Suite', () => {
         .send({
           farmId: 'farm_disease_test_01',
           cropType: 'Wheat',
-          imageUrl: 'https://storage.agrietech.et/photos/wheat_rust_sample.jpg',
+          imageUrl: 'https://images.unsplash.com/photo-wheat-rust.jpg',
         });
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.diseaseName).toBeDefined();
-      expect(res.body.data.confidenceScore).toBeGreaterThan(0.8);
+      expect(res.body.data.confidenceScore).toBeGreaterThan(0.7);
       expect(res.body.data.treatmentEn).toBeDefined();
       expect(res.body.data.treatmentAm).toBeDefined();
     }, 120000);

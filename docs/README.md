@@ -1,6 +1,6 @@
-# AgriEtech Backend Developer Documentation
+# EthioFarm Backend Developer Documentation
 
-Welcome to the official developer documentation suite for the **AgriEtech Multi-Hazard Agricultural Early Warning Platform (Backend)**.
+Welcome to the official developer documentation suite for the **EthioFarm Multi-Hazard Agricultural Early Warning Platform (Backend)**.
 
 ---
 

@@ -1,12 +1,12 @@
-# AgriEtech IoT Hardware Firmware
+# EthioFarm IoT Hardware Firmware
 
-> Embedded C++ firmware for the AgriEtech ESP32/Arduino Soil Moisture, Temperature, and Telemetry Node.
+> Embedded C++ firmware for the EthioFarm ESP32/Arduino Soil Moisture, Temperature, and Telemetry Node.
 
 ---
 
 ## 📋 Overview
 
-The AgriEtech IoT ground telemetry fleet deploys microcontrollers across Ethiopian farm plots to capture high-frequency agro-meteorological metrics. This firmware reads analog capacitive soil moisture, digital air/soil temperature probes, and battery voltage, packaging them as JSON payloads transmitted over Wi-Fi/GSM directly to Firebase Realtime Database or the AgriEtech backend ingestion gateway.
+The EthioFarm IoT ground telemetry fleet deploys microcontrollers across Ethiopian farm plots to capture high-frequency agro-meteorological metrics. This firmware reads analog capacitive soil moisture, digital air/soil temperature probes, and battery voltage, packaging them as JSON payloads transmitted over Wi-Fi/GSM directly to Firebase Realtime Database or the EthioFarm backend ingestion gateway.
 
 ---
 
@@ -51,5 +51,5 @@ Capacitive soil moisture sensors produce analog ADC voltage corresponding to die
 ## 📡 Remote Telemetry Integration
 
 - **Firebase Realtime Database target**: `https://your-project-id.firebaseio.com/sensors/<HARDWARE_ID>.json`
-- **AgriEtech Ingestion Endpoint**: `POST /api/v1/sensors/telemetry` (Header: `x-sensor-api-key: <TOKEN>`)
+- **EthioFarm Ingestion Endpoint**: `POST /api/v1/sensors/telemetry` (Header: `x-sensor-api-key: <TOKEN>`)
 - Detailed payload specifications and LoRaWAN bridging guides are documented in [**docs/ESP32_IOT_INTEGRATION_GUIDE.md**](../docs/ESP32_IOT_INTEGRATION_GUIDE.md).

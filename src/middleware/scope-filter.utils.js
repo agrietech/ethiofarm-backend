@@ -87,14 +87,20 @@ function buildFarmScope(user, existingWhere = {}) {
   } else if (role === 'WOREDA_OFFICER') {
     if (user.woredaId) {
       where.woredaId = user.woredaId;
+    } else {
+      where.userId = user.id;
     }
   } else if (role === 'ZONAL_OFFICER') {
     if (user.zoneId) {
       where.woreda = { zoneId: user.zoneId };
+    } else {
+      where.userId = user.id;
     }
   } else if (role === 'REGIONAL_OFFICER') {
     if (user.regionId) {
       where.woreda = { zone: { regionId: user.regionId } };
+    } else {
+      where.userId = user.id;
     }
   }
 

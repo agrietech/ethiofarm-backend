@@ -40,17 +40,17 @@ router.get('/telemetry/summary', authenticate, enforceSensorScope, controller.ge
 router.post('/telemetry', authenticateSensor, telemetryLimiter, controller.recordTelemetry);
 router.get('/farm/:farmId', authenticate, controller.getSensors);
 
-// Register a sensor — restricted to roles with sensors.register permission
-router.post('/', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'), controller.registerSensor);
+// Register a sensor — restricted to Farmer owner, assigned Development Agent, or Super Admin
+router.post('/', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'), controller.registerSensor);
 router.get('/', authenticate, enforceSensorScope, controller.getSensors);
 
-// Telemetry query endpoints matching Flutter SensorRepository
+// Telemetry query endpoints matching Flutter SensorRepository (accessible to all authenticated users in their scope)
 router.get('/:id/telemetry', authenticate, controller.getSensorTelemetry);
 router.get('/:hardwareId/latest', authenticate, controller.getLatestSensorReading);
 
 // Single sensor details & OCC update endpoints
 router.get('/:id', authenticate, controller.getSensorDetails);
-router.put('/:id', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'), controller.updateSensor);
-router.patch('/:id', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'), controller.updateSensor);
+router.put('/:id', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'), controller.updateSensor);
+router.patch('/:id', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'), controller.updateSensor);
 
 module.exports = router;

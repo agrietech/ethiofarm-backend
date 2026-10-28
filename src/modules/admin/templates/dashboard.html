@@ -2845,11 +2845,10 @@
           zoomAnimation: true,
         });
 
-        // High-availability CartoDB Voyager tiles with fallback
-        const primaryTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a> | EthioFarm GIS',
-          maxZoom: 19,
-          subdomains: 'abcd',
+        // Google Maps hybrid tiles with high availability
+        const primaryTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=AIzaSyAeRxpImnvHs4VeDcd2wts_BILIhzg0Ge4', {
+          attribution: '&copy; Google Maps | EthioFarm GIS',
+          maxZoom: 20,
         });
 
         primaryTileLayer.on('tileerror', function() {
@@ -3023,31 +3022,25 @@
               fillOpacity: 0.95,
             });
 
-            const popupContent = `
-              <div style="font-family:Inter,sans-serif;padding:6px;min-width:240px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                  <span style="background:${color};color:white;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">
-                    ${a.severity || 'CRITICAL'}
-                  </span>
-                  <span style="font-size:11px;color:#64748b;font-weight:600;">
-                    ${a.hazardType || 'DROUGHT'}
-                  </span>
-                </div>
-                <h4 style="margin:0 0 4px;font-size:13px;color:#0f172a;">${a.headline || a.titleEn || 'Emergency Hazard'}</h4>
-                <p style="margin:0 0 6px;font-size:11.5px;color:#334155;">${a.titleAm || ''}</p>
-                <div style="background:#f8fafc;padding:6px;border-radius:6px;border:1px solid #e2e8f0;font-size:11px;margin-bottom:8px;">
-                  <div><strong>Jurisdiction:</strong> ${a.woreda?.nameEn || 'Woreda'} (${a.woreda?.zone?.region?.nameEn || region})</div>
-                  <div><strong>Threat Zone:</strong> ${(hazardRadius / 1000).toFixed(0)} km radius</div>
-                  <div><strong>Advisory:</strong> ${a.messageEn ? a.messageEn.substring(0, 110) + '...' : 'Implement crop protection protocols.'}</div>
-                </div>
-                <button class="btn btn-warning btn-sm" style="width:100%;font-size:11px;padding:4px 8px;" onclick="triggerDirectUssdForHazard('${a.woredaId || 'woreda_adama_01'}', '${a.hazardType || 'DROUGHT'}', '${a.woreda?.nameEn || 'Adama Zuria'}')">
-                  Broadcast USSD/SMS to this Woreda
-                </button>
-              </div>
-            `;
+            // Click listener: Dynamic hazard shading without map-cluttering text popups
+            const onHazardClick = () => {
+              hazardCircle.setStyle({ fillOpacity: 0.58, weight: 3.5 });
+              setTimeout(() => {
+                hazardCircle.setStyle({ fillOpacity: 0.28, weight: 2 });
+              }, 4000);
 
-            hazardCircle.bindPopup(popupContent);
-            centerMarker.bindPopup(popupContent);
+              const hudPlace = document.getElementById('mapHudPlace');
+              const hudHazard = document.getElementById('mapHudHazard');
+              const hudStats = document.getElementById('mapHudStats');
+              if (hudPlace) hudPlace.innerText = `${a.woreda?.nameEn || 'Woreda'} (${a.woreda?.zone?.region?.nameEn || region})`;
+              if (hudHazard) hudHazard.innerHTML = `<span style="color:${color};font-weight:bold;">${a.severity || 'CRITICAL'} ${a.hazardType || 'HAZARD'}</span>`;
+              if (hudStats) {
+                hudStats.innerHTML = `${a.headline || a.titleEn || 'Hazard Active'} • Radius: ${(hazardRadius / 1000).toFixed(0)} km <button class="btn btn-warning btn-sm" style="font-size:10px;padding:2px 6px;margin-left:8px;" onclick="triggerDirectUssdForHazard('${a.woredaId || ''}', '${a.hazardType || 'DROUGHT'}', '${a.woreda?.nameEn || 'Woreda'}')">Broadcast USSD</button>`;
+              }
+            };
+
+            hazardCircle.on('click', onHazardClick);
+            centerMarker.on('click', onHazardClick);
 
             mapLayerGroup.addLayer(hazardCircle);
             mapLayerGroup.addLayer(centerMarker);
@@ -3087,15 +3080,16 @@
               fillOpacity: 0.85
             });
 
-            farmMarker.bindPopup(`
-              <div style="font-family:Inter,sans-serif;padding:4px;">
-                <h4 style="margin:0 0 4px;color:#065f46;">Farm: ${f.farmName || 'Model Farm'}</h4>
-                <p style="margin:0;font-size:11.5px;"><strong>Crop:</strong> ${f.primaryCrop || 'Teff'}</p>
-                <p style="margin:0;font-size:11.5px;"><strong>Size:</strong> ${f.areaHectares || 2.5} Ha</p>
-                <p style="margin:0;font-size:11.5px;"><strong>Owner:</strong> ${f.user?.fullName || 'Farmer'}</p>
-                <p style="margin:0;font-size:11.5px;"><strong>GPS:</strong> ${lat.toFixed(4)}, ${lng.toFixed(4)}</p>
-              </div>
-            `);
+            farmMarker.on('click', () => {
+              farmMarker.setStyle({ radius: 10, fillOpacity: 1, weight: 3 });
+              setTimeout(() => farmMarker.setStyle({ radius: 7, fillOpacity: 0.85, weight: 2 }), 3000);
+              const hudPlace = document.getElementById('mapHudPlace');
+              const hudHazard = document.getElementById('mapHudHazard');
+              const hudStats = document.getElementById('mapHudStats');
+              if (hudPlace) hudPlace.innerText = `Farm: ${f.farmName || 'Holding'}`;
+              if (hudHazard) hudHazard.innerHTML = `<span style="color:#059669;font-weight:bold;">${f.primaryCrop || 'Crop'} • ${f.areaHectares || 2.5} Ha</span>`;
+              if (hudStats) hudStats.innerText = `Owner: ${f.user?.fullName || 'Farmer'} • GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            });
             mapLayerGroup.addLayer(farmMarker);
           });
         } catch (e) {
@@ -3126,14 +3120,16 @@
               fillOpacity: 0.85
             });
 
-            sensorMarker.bindPopup(`
-              <div style="font-family:Inter,sans-serif;padding:4px;">
-                <h4 style="margin:0 0 4px;color:#1e40af;">Sensor: ${s.hardwareId || 'IoT Node'}</h4>
-                <p style="margin:0;font-size:11.5px;"><strong>Type:</strong> ${s.sensorType || 'Soil Telemetry'}</p>
-                <p style="margin:0;font-size:11.5px;"><strong>Status:</strong> ${s.isActive !== false ? 'Active' : 'Inactive'}</p>
-                <p style="margin:0;font-size:11.5px;"><strong>Holding:</strong> ${s.farm?.farmName || 'Bahir Dar Plot'}</p>
-              </div>
-            `);
+            sensorMarker.on('click', () => {
+              sensorMarker.setStyle({ radius: 11, fillOpacity: 1, weight: 3 });
+              setTimeout(() => sensorMarker.setStyle({ radius: 8, fillOpacity: 0.85, weight: 2 }), 3000);
+              const hudPlace = document.getElementById('mapHudPlace');
+              const hudHazard = document.getElementById('mapHudHazard');
+              const hudStats = document.getElementById('mapHudStats');
+              if (hudPlace) hudPlace.innerText = `IoT Node: ${s.hardwareId || 'Sensor'}`;
+              if (hudHazard) hudHazard.innerHTML = `<span style="color:#2563eb;font-weight:bold;">${s.sensorType || 'Soil Probe'} • ${s.isActive !== false ? 'ACTIVE' : 'STANDBY'}</span>`;
+              if (hudStats) hudStats.innerText = `Holding: ${s.farm?.farmName || 'Plot'} • Last Telemetry Synchronized`;
+            });
             mapLayerGroup.addLayer(sensorMarker);
           });
         } catch (e) {
@@ -3191,13 +3187,28 @@
               if (typeof geom === 'string') {
                 try { geom = JSON.parse(geom); } catch (_) { return; }
               }
+              const defaultBorderColor = type === 'regions' ? '#3b82f6' : '#10b981';
               const boundaryLayer = L.geoJSON(geom, {
                 style: {
-                  color: type === 'regions' ? '#3b82f6' : '#10b981',
+                  color: defaultBorderColor,
                   weight: type === 'regions' ? 2.5 : 1.5,
-                  fillOpacity: 0.08,
+                  fillOpacity: 0.12,
+                  fillColor: defaultBorderColor,
                 }
-              }).bindPopup(`<strong>${item.nameEn || item.name || 'Boundary'}</strong><br>${item.nameAm || ''}`);
+              });
+
+              // Click: dynamically shade the area with hazard highlight without floating text boxes
+              boundaryLayer.on('click', () => {
+                boundaryLayer.setStyle({ fillOpacity: 0.45, weight: 3.5 });
+                setTimeout(() => boundaryLayer.setStyle({ fillOpacity: 0.12, weight: type === 'regions' ? 2.5 : 1.5 }), 3500);
+
+                const hudPlace = document.getElementById('mapHudPlace');
+                const hudHazard = document.getElementById('mapHudHazard');
+                const hudStats = document.getElementById('mapHudStats');
+                if (hudPlace) hudPlace.innerText = `${item.nameEn || item.name || 'Boundary'} (${type.toUpperCase()})`;
+                if (hudHazard) hudHazard.innerHTML = `<span style="color:#0284c7;font-weight:bold;">${item.nameAm || ''}</span>`;
+                if (hudStats) hudStats.innerText = `Administrative ${type.slice(0, -1)} boundary shaded on map. Zero clutter mode active.`;
+              });
               mapLayerGroup.addLayer(boundaryLayer);
             }
           });

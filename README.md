@@ -1,4 +1,4 @@
-# AgriEtech Backend
+# EthioFarm Backend
 
 **Multi-Hazard Agricultural Early Warning & Planetary Intelligence Engine for Ethiopia**
 
@@ -7,13 +7,13 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%20PostGIS-4169E1?logo=postgresql)](https://www.postgresql.org)
 [![Prisma](https://img.shields.io/badge/Prisma-5.x-2D3748?logo=prisma)](https://www.prisma.io)
 [![Redis](https://img.shields.io/badge/Redis-Upstash%20Cache-DC382D?logo=redis)](https://redis.io)
-[![USSD](https://img.shields.io/badge/USSD-Shortcode%20*212%23-008080)](docs/README.md)
+[![Alerts](https://img.shields.io/badge/Delivery-SMS%20%7C%20Voice%20%7C%20Push-008080)](docs/README.md)
 
 ---
 
 ## 🌟 Executive Overview
 
-**AgriEtech Backend** is an enterprise-grade agricultural early warning and geospatial analytics engine built for the sovereign agricultural territory of Ethiopia. It unifies Google Earth Engine multi-satellite compute, real-time USGS seismology fault modeling, RUSLE soil degradation equations, IoT sensor fleet telemetry, and automated multi-channel delivery via USSD `*212#`, SMS character budgeting, and FCM push notifications.
+**EthioFarm Backend** is an enterprise-grade agricultural early warning and geospatial analytics engine built for the sovereign agricultural territory of Ethiopia. It unifies Google Earth Engine multi-satellite compute, real-time USGS seismology fault modeling, RUSLE soil degradation equations, IoT sensor fleet telemetry, and automated multi-channel delivery via SMS notifications, character budgeting, and FCM push notifications.
 
 ---
 
@@ -37,7 +37,7 @@
    - Agricultural Lime (ኖራ) application prescriptions in $\text{Qt/ha}$ for acidic Dystric Nitisols ($pH < 5.2$).
 
 4. **Last-Mile Delivery & Multilingual Communications**:
-   - **USSD `*212#` Gateway**: 6-tier interactive state machine delivering weather forecasts, market prices, threat reporting, and soil/seismic alerts on basic 2G feature phones.
+   - **Emergency SMS Broadcast**: High-delivery telecom-integrated engine dispatching weather forecasts, market prices, and pest emergency alerts.
    - **SMS Character Budgeter**: Live detection of GSM 7-bit (160 chars) vs. UCS-2 Unicode (70 chars) with Amharic and Afaan Oromoo templates.
    - **Multimodal AI Agronomy**: Gemini 2.5 Flash on OpenRouter for botanical disease triage (Teff rust, Coffee leaf rust) with offline fallback.
 
@@ -132,7 +132,7 @@ npm test
 
 | Engineer | Student ID | Formal Engineering Role | Assigned System Deliverables | Project Domain Focus |
 | :--- | :--- | :--- | :--- | :--- |
-| **Abraham Amogne** | `CTC-329-26` | **Team Leader · System Architect** | System Architecture, Express API Gateway, PostgreSQL PostGIS schemas and migrations, 7-tier geographic RBAC middleware, Google Earth Engine satellite connector, USGS Joyner-Boore seismology engine, RUSLE soil loss equations, Master Multi-Hazard Composite Predictor, Socket.IO real-time alert gateway, and USSD `*212#` state engine. | `agriEtech-backend`<br>`agriEtech-frontend`<br>`ethiofarm-web` |
+| **Abraham Amogne** | `CTC-329-26` | **Team Leader · System Architect** | System Architecture, Express API Gateway, PostgreSQL PostGIS schemas and migrations, 7-tier geographic RBAC middleware, Google Earth Engine satellite connector, USGS Joyner-Boore seismology engine, RUSLE soil loss equations, Master Multi-Hazard Composite Predictor, Socket.IO real-time alert gateway, and notification dispatch engines. | `agriEtech-backend`<br>`agriEtech-frontend`<br>`ethiofarm-web` |
 | **Alen Biruk** | `CTC-2176-26` | **Web Platform Engineer** | Farm Operations & IoT Soil Sensor Fleet, OCHA HDX boundary GeoJSON indexing, farm polygon validation, and ground sensor telemetry. | `ethiofarm-web` (Farm Operations) |
 | **Zinegnaw** | `CTC-514-26` | **Web Platform Engineer** | Crop AI Vision & Pathology, camera viewfinder capture, multipart botanical photo analysis, and plant disease triage services. | `ethiofarm-web` (Crop Pathology) |
 | **Banchamlak Golla** | `CTC-2952-26` | **Web Platform Engineer** | Agro-Meteorology & Alerts, Open-Meteo weather telemetry caching, Copernicus GloFAS river discharge, and multi-hazard alert notifications. | `ethiofarm-web` (Weather & Hazards) |

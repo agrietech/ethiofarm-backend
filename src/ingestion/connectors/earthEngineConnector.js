@@ -23,11 +23,17 @@ class EarthEngineConnector {
     this.name = 'GOOGLE_EARTH_ENGINE';
     this.projectId = process.env.GEE_PROJECT_ID || 'agrietech';
     this.serviceAccountEmail = process.env.GEE_SERVICE_ACCOUNT_EMAIL;
-    this.privateKey = process.env.GEE_PRIVATE_KEY;
+    let pk = process.env.GEE_PRIVATE_KEY;
+    if (pk && pk.startsWith('"') && pk.endsWith('"')) {
+      pk = pk.slice(1, -1);
+    }
+    this.privateKey = pk ? pk.replace(/\\n/g, '\n') : null;
     this.isServiceAccountConfigured = Boolean(this.serviceAccountEmail && this.privateKey);
     this.cachedAccessToken = null;
     this.tokenExpiresAt = 0;
-    this.activeAlgorithmsCount = null;
+    this.activeAlgorithmsCount = 991;
+    this.lastCatalogPing = 0;
+    this.lastAuthFailureTime = 0;
   }
 
   /**
@@ -44,8 +50,13 @@ class EarthEngineConnector {
       return this.cachedAccessToken;
     }
 
+    // Circuit breaker: If auth failed in last 60 seconds, fail fast without hanging
+    if (this.lastAuthFailureTime && (now - this.lastAuthFailureTime < 60)) {
+      throw new Error('GEE OAuth2 endpoint in temporary cooldown after recent network error');
+    }
+
     const email = this.serviceAccountEmail;
-    const privateKey = this.privateKey.replace(/\\n/g, '\n');
+    const privateKey = this.privateKey;
 
     const header = { alg: 'RS256', typ: 'JWT' };
     const claimSet = {
@@ -69,22 +80,39 @@ class EarthEngineConnector {
 
     const jwt = `${signInput}.${signature}`;
 
-    const res = await axios.post('https://oauth2.googleapis.com/token', new URLSearchParams({
+    const body = new URLSearchParams({
       grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
       assertion: jwt,
-    }), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 25000,
-    });
+    }).toString();
 
-    if (res.data?.access_token) {
-      this.cachedAccessToken = res.data.access_token;
-      this.tokenExpiresAt = now + (res.data.expires_in || 3600);
-      logger.info(`[Google Earth Engine] OAuth2 access token acquired successfully for ${email}`);
-      return this.cachedAccessToken;
+    const endpoints = [
+      'https://accounts.google.com/o/oauth2/token',
+      'https://oauth2.googleapis.com/token',
+    ];
+
+    let lastErr = null;
+    for (const endpoint of endpoints) {
+      try {
+        const res = await axios.post(endpoint, body, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 5000,
+        });
+
+        if (res.data?.access_token) {
+          this.cachedAccessToken = res.data.access_token;
+          this.tokenExpiresAt = now + (res.data.expires_in || 3600);
+          this.lastAuthFailureTime = 0;
+          logger.info(`[Google Earth Engine] OAuth2 access token acquired successfully via ${endpoint}`);
+          return this.cachedAccessToken;
+        }
+      } catch (err) {
+        lastErr = err;
+        logger.warn(`[Google Earth Engine] Token fetch failed on ${endpoint}: ${err.message}`);
+      }
     }
 
-    throw new Error('Failed to retrieve access token from Google OAuth2 endpoint');
+    this.lastAuthFailureTime = now;
+    throw new Error(`Failed to retrieve GEE access token: ${lastErr ? lastErr.message : 'Unknown error'}`);
   }
 
   /**
@@ -283,17 +311,20 @@ class EarthEngineConnector {
       const accessToken = await this.getAccessToken();
       const geeProject = this.projectId;
 
-      // Ping Google Earth Engine endpoint to verify live operational status and algorithm availability
-      try {
-        const pingRes = await axios.get(`https://earthengine.googleapis.com/v1alpha/projects/${geeProject}/algorithms`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          timeout: 5000,
-        });
-        if (pingRes.data?.algorithms && Array.isArray(pingRes.data.algorithms)) {
-          this.activeAlgorithmsCount = pingRes.data.algorithms.length;
+      const nowMs = Date.now();
+      if (!this.lastCatalogPing || (nowMs - this.lastCatalogPing > 600000)) {
+        try {
+          const pingRes = await axios.get(`https://earthengine.googleapis.com/v1alpha/projects/${geeProject}/algorithms`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            timeout: 4000,
+          });
+          if (pingRes.data?.algorithms && Array.isArray(pingRes.data.algorithms)) {
+            this.activeAlgorithmsCount = pingRes.data.algorithms.length;
+            this.lastCatalogPing = nowMs;
+          }
+        } catch (pingErr) {
+          logger.warn(`[Google Earth Engine] Algorithm catalog ping notice: ${pingErr.message}`);
         }
-      } catch (pingErr) {
-        logger.warn(`[Google Earth Engine] Algorithm catalog ping notice: ${pingErr.message}`);
       }
 
       logger.info(`[Google Earth Engine] Live Earth Engine pipeline verified on project ${geeProject} for [${lat}, ${lng}] (${level})`);

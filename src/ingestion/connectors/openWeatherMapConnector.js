@@ -19,7 +19,7 @@ const openWeatherMapConnector = {
           appid: apiKey,
           units: 'metric'
         },
-        timeout: 10000
+        timeout: 5000
       });
 
       const data = response.data;

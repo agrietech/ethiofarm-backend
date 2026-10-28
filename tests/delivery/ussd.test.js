@@ -60,5 +60,5 @@ describe('USSD Delivery Gateway Suite', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('response');
     expect(res.body.shouldClose).toBe(true);
-  });
+  }, 60000);
 });

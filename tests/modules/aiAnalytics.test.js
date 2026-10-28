@@ -30,7 +30,7 @@ describe('AI Graph & Time-Series Analytics Suite (Gemini 2.5 Flash)', () => {
     expect(res.body.data.aiInsights.trendSummary.en).toBeDefined();
     expect(res.body.data.aiInsights.droughtRiskStatus).toBeDefined();
     expect(res.body.data.aiInsights.actionableGuidance.am.length).toBeGreaterThan(0);
-  });
+  }, 120000);
 
   it('should include AI insights when temporal-trends is called with includeAi=true', async () => {
     const res = await request(app)
@@ -42,5 +42,5 @@ describe('AI Graph & Time-Series Analytics Suite (Gemini 2.5 Flash)', () => {
     expect(res.body.data.metrics).toBeDefined();
     expect(res.body.data.aiInsights).toBeDefined();
     expect(res.body.data.aiInsights.trendSummary).toBeDefined();
-  });
+  }, 120000);
 });

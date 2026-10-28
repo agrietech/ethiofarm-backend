@@ -234,6 +234,75 @@ function initSocket(httpServer) {
       socket.emit('unsubscribed', { farmId });
     });
 
+    // ── 6. Real-Time AI Live Voice & Telemetry Stream ──
+    socket.on('ai:voice-query', async (payload = {}) => {
+      const {
+        question,
+        audioTranscript,
+        language = 'am',
+        userRole: overrideRole,
+        userName: overrideName,
+        jurisdiction: overrideJurisdiction,
+        requestId = `ai_${Date.now()}`,
+      } = payload;
+
+      const cleanQuery = (question || audioTranscript || '').trim();
+      if (!cleanQuery) {
+        socket.emit('ai:voice-error', {
+          requestId,
+          error: 'EMPTY_QUERY',
+          message: language === 'am' ? 'ባዶ ጥያቄ ማቅረብ አይቻልም።' : 'Query cannot be empty.',
+        });
+        return;
+      }
+
+      // 1. Emit instant acknowledgment / thinking state
+      socket.emit('ai:voice-thinking', {
+        requestId,
+        query: cleanQuery,
+        language,
+        timestamp: new Date().toISOString(),
+      });
+
+      try {
+        const aiVoiceService = require('../modules/ai/aiVoice.service');
+        const effectiveRole = overrideRole || role || 'FARMER';
+        const effectiveName = overrideName || socket.user?.fullName || null;
+        const effectiveJurisdiction = overrideJurisdiction || {
+          region: socket.user?.regionName || null,
+          zone: socket.user?.zoneName || null,
+          woreda: socket.user?.woredaName || null,
+          kebele: socket.user?.kebeleName || null,
+        };
+
+        const result = await aiVoiceService.processVoiceInquiry({
+          userQuestion: cleanQuery,
+          audioTranscript,
+          language,
+          userId,
+          userRole: effectiveRole,
+          userName: effectiveName,
+          userJurisdiction: effectiveJurisdiction,
+          baseUrl: env.APP_URL || 'https://agrietech.onrender.com',
+        });
+
+        socket.emit('ai:voice-response', {
+          requestId,
+          success: true,
+          isOfflineFallback: result.isAiOffline || false,
+          data: result,
+          ...result,
+        });
+      } catch (aiErr) {
+        logger.warn(`[WebSocket] Live AI voice error for user ${userId}: ${aiErr.message}`);
+        socket.emit('ai:voice-error', {
+          requestId,
+          error: 'AI_INFERENCE_ERROR',
+          message: aiErr.message,
+        });
+      }
+    });
+
     socket.on('disconnect', (reason) => {
       logger.info(`[WebSocket] Disconnected: userId=${userId} reason=${reason}`);
     });

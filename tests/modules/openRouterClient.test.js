@@ -13,7 +13,7 @@ describe('OpenRouter Gemini 2.5 Flash Client Suite', () => {
 
     expect(result.success).toBe(true);
     expect(result.content).toBeDefined();
-  });
+  }, 90000);
 
   it('should analyze crop vision and return bilingual Amharic & English diagnostics', async () => {
     const result = await openRouterClient.analyzeCropVision({
@@ -33,7 +33,7 @@ describe('OpenRouter Gemini 2.5 Flash Client Suite', () => {
     expect(result.diagnosis.diseaseName.nameAm).toBeDefined();
     expect(result.diagnosis.symptoms.am).toBeDefined();
     expect(result.diagnosis.treatment.chemicalAm).toBeDefined();
-  });
+  }, 90000);
 
   it('should generate time-series graph insights with bilingual summaries', async () => {
     const result = await openRouterClient.analyzeGraphSeries({
@@ -51,7 +51,7 @@ describe('OpenRouter Gemini 2.5 Flash Client Suite', () => {
     expect(result.insights.trendSummary.am).toBeDefined();
     expect(result.insights.droughtRiskStatus.status).toBeDefined();
     expect(result.insights.actionableGuidance.am.length).toBeGreaterThan(0);
-  });
+  }, 90000);
 
   it('should process farmer voice inquiries in Amharic & English', async () => {
     const result = await openRouterClient.processVoiceInquiry({
@@ -63,5 +63,5 @@ describe('OpenRouter Gemini 2.5 Flash Client Suite', () => {
     expect(result.data.responseAm).toBeDefined();
     expect(result.data.responseEn).toBeDefined();
     expect(result.data.recommendedAction).toBeDefined();
-  });
+  }, 90000);
 });

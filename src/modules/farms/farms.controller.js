@@ -50,7 +50,7 @@ async function createFarm(req, res, next) {
 
     const kebeleId = body.kebeleId || body.kebele_id;
     let targetUserId = userId;
-    if (body.userId && ['ADMIN', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER'].includes(req.user?.role)) {
+    if (body.userId && ['ADMIN', 'DEVELOPMENT_AGENT'].includes(req.user?.role)) {
       targetUserId = body.userId;
     }
 

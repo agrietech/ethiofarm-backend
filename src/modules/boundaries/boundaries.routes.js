@@ -18,11 +18,11 @@ router.get('/woredas/:id', optionalAuthenticate, setCacheHeaders(3600), controll
 router.get('/kebeles', optionalAuthenticate, setCacheHeaders(3600), controller.getKebeles);
 router.get('/kebeles/:id', optionalAuthenticate, setCacheHeaders(3600), controller.getKebeleDetails);
 
-// Register a new Kebele boundary with polygon (Development Agents, Officers, and Admin)
+// Register a new Kebele boundary with polygon (Development Agents and Super Admin)
 router.post(
   '/kebeles',
   authenticate,
-  authorize('DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'),
+  authorize('DEVELOPMENT_AGENT', 'ADMIN'),
   [
     body('nameEn')
       .trim()
@@ -64,11 +64,11 @@ router.post(
   controller.createKebele
 );
 
-// Development Agent / Officers / Admin endpoint to insert/update Kebele location and polygon boundary in GIS
+// Development Agent / Super Admin endpoint to insert/update Kebele location and polygon boundary in GIS
 router.put(
   '/kebeles/:id/polygon',
   authenticate,
-  authorize('DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'),
+  authorize('DEVELOPMENT_AGENT', 'ADMIN'),
   [
     body('polygonGeojson')
       .notEmpty()

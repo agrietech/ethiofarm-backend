@@ -20,7 +20,7 @@ describe('Analytics Module API Suite', () => {
     expect(res.body.data.totalFarmsRegistered).toBeDefined();
     expect(res.body.data.nationalBelgSeasonVigor).toBeDefined();
     expect(res.body.data.compositeRiskDistribution).toBeDefined();
-  });
+  }, 90000);
 
   it('GET /api/v1/analytics/regional-breakdown - should return region-by-region hazard and rainfall metrics', async () => {
     const res = await request(app)
@@ -33,7 +33,7 @@ describe('Analytics Module API Suite', () => {
     expect(res.body.data.length).toBeGreaterThan(0);
     expect(res.body.data[0].region).toBeDefined();
     expect(res.body.data[0].avgRainfallMm).toBeDefined();
-  });
+  }, 90000);
 
   it('GET /api/v1/analytics/temporal-trends - should return multi-horizon trends (DAILY, MONTHLY, YEARLY, OVER_YEARS)', async () => {
     // 1. Daily
@@ -63,7 +63,7 @@ describe('Analytics Module API Suite', () => {
     expect(resMultiYear.status).toBe(200);
     expect(resMultiYear.body.data.timeframe).toBe('OVER_YEARS');
     expect(resMultiYear.body.data.decadalShifts).toBeDefined();
-  });
+  }, 90000);
 
   it('GET /api/v1/analytics/agronomic-advisories - should return multilingual actionable recommendations', async () => {
     const res = await request(app)
@@ -78,5 +78,5 @@ describe('Analytics Module API Suite', () => {
     expect(res.body.data.advisories[0].titleAm).toBeDefined();
     expect(res.body.data.advisories[0].titleOm).toBeDefined();
     expect(res.body.data.advisories[0].actionEn).toBeDefined();
-  });
+  }, 90000);
 });

@@ -32,7 +32,7 @@ class PerenualClient {
           q: query || undefined,
           page,
         },
-        timeout: 10000,
+        timeout: 2500,
       });
 
       const items = response.data?.data || [];

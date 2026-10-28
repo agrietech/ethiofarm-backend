@@ -13,11 +13,20 @@ describe('Hardware ID Sensor Registration & Direct Telemetry Suite', () => {
   const testHardwareId = 'HW-ESP32-ETH-001';
 
   beforeAll(async () => {
-    // Ensure test user exists
-    await prisma.user.upsert({
-      where: { id: farmerUser.id },
-      update: {},
-      create: {
+    // Pre-clean leftover test data from any interrupted prior run
+    // (sensors/farms/users must be removed in FK-safe order)
+    await prisma.sensorReading.deleteMany({
+      where: { sensor: { hardwareId: testHardwareId } },
+    });
+    await prisma.sensor.deleteMany({ where: { hardwareId: testHardwareId } });
+    await prisma.farm.deleteMany({ where: { id: 'farm_hw_test_01' } });
+    await prisma.user.deleteMany({
+      where: { OR: [{ id: farmerUser.id }, { phoneNumber: farmerUser.phoneNumber }] },
+    });
+
+    // Create test user fresh
+    await prisma.user.create({
+      data: {
         id: farmerUser.id,
         phoneNumber: farmerUser.phoneNumber,
         email: 'farmer_hw_test@ethiofarm.et',
@@ -44,6 +53,7 @@ describe('Hardware ID Sensor Registration & Direct Telemetry Suite', () => {
       },
     });
   });
+
 
   afterAll(async () => {
     // Clean up test records
