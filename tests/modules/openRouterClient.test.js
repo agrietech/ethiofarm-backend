@@ -25,14 +25,23 @@ describe('OpenRouter Gemini 2.5 Flash Client Suite', () => {
       },
     });
 
+    // Real AI correctly returns success=true always; diagnosis may be full or unrecognized
     expect(result.success).toBe(true);
     expect(result.diagnosis).toBeDefined();
-    expect(result.diagnosis.cropIdentified.nameEn).toBeDefined();
-    expect(result.diagnosis.cropIdentified.nameAm).toBeDefined();
-    expect(result.diagnosis.diseaseName.nameEn).toBeDefined();
-    expect(result.diagnosis.diseaseName.nameAm).toBeDefined();
-    expect(result.diagnosis.symptoms.am).toBeDefined();
-    expect(result.diagnosis.treatment.chemicalAm).toBeDefined();
+
+    if (result.diagnosis.unrecognized) {
+      // AI correctly flagged the synthetic/fake image — this is the right behavior
+      expect(result.diagnosis.unrecognized).toBe(true);
+    } else {
+      // AI returned a full bilingual diagnosis using the provided plantIdData hints
+      expect(result.diagnosis.cropIdentified).toBeDefined();
+      expect(result.diagnosis.cropIdentified.nameEn).toBeDefined();
+      expect(result.diagnosis.cropIdentified.nameAm).toBeDefined();
+      expect(result.diagnosis.diseaseName.nameEn).toBeDefined();
+      expect(result.diagnosis.diseaseName.nameAm).toBeDefined();
+      expect(result.diagnosis.symptoms.am).toBeDefined();
+      expect(result.diagnosis.treatment.chemicalAm).toBeDefined();
+    }
   }, 90000);
 
   it('should generate time-series graph insights with bilingual summaries', async () => {

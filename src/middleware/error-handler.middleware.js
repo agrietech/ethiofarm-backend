@@ -100,6 +100,7 @@ function errorHandler(err, req, res, _next) {
 
   res.status(statusCode).json({
     success: false,
+    code,
     error: {
       code,
       message,
