@@ -254,9 +254,9 @@ async function updateFarm({ id, data = {}, user = {}, clientUpdatedAt }) {
     throw new NotFoundError(`Farm with ID ${id} not found`);
   }
 
-  // 1. Jurisdictional / Ownership Authorization
+  // 1. Ownership & Super Admin Authorization
   const role = (user.role || 'FARMER').toUpperCase();
-  if (role !== 'ADMIN' && role !== 'RESEARCHER') {
+  if (role !== 'ADMIN') {
     if (role === 'FARMER' && existing.userId !== user.id) {
       throw new ForbiddenError('Access denied: You can only update your own farms');
     }
@@ -268,14 +268,8 @@ async function updateFarm({ id, data = {}, user = {}, clientUpdatedAt }) {
         throw new ForbiddenError('Access denied: Farm is outside your woreda jurisdiction');
       }
     }
-    if (role === 'WOREDA_OFFICER' && user.woredaId && existing.woredaId !== user.woredaId) {
-      throw new ForbiddenError('Access denied: Farm is outside your woreda jurisdiction');
-    }
-    if (role === 'ZONAL_OFFICER' && user.zoneId && existing.woreda?.zoneId !== user.zoneId) {
-      throw new ForbiddenError('Access denied: Farm is outside your zone jurisdiction');
-    }
-    if (role === 'REGIONAL_OFFICER' && user.regionId && existing.woreda?.zone?.regionId !== user.regionId) {
-      throw new ForbiddenError('Access denied: Farm is outside your region jurisdiction');
+    if (['WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'RESEARCHER'].includes(role)) {
+      throw new ForbiddenError('Access denied: Officers have national/regional analytical read access only and cannot mutate farm records. Contact Super Admin or the assigned Development Agent.');
     }
   }
 
@@ -381,28 +375,14 @@ async function deleteFarm({ id, user = {} }) {
     throw new NotFoundError(`Farm with ID ${id} not found`);
   }
 
-  // Ownership & Jurisdictional Authorization
+  // Ownership & Super Admin Authorization
   const role = (user.role || 'FARMER').toUpperCase();
   if (role !== 'ADMIN') {
     if (role === 'FARMER' && existing.userId !== user.id) {
       throw new ForbiddenError('Access denied: You can only delete your own farms');
     }
-    if (role === 'DEVELOPMENT_AGENT') {
-      if (user.kebeleId && existing.kebeleId && existing.kebeleId !== user.kebeleId) {
-        throw new ForbiddenError('Access denied: Farm is outside your kebele jurisdiction');
-      }
-      if (user.woredaId && existing.woredaId !== user.woredaId) {
-        throw new ForbiddenError('Access denied: Farm is outside your woreda jurisdiction');
-      }
-    }
-    if (role === 'WOREDA_OFFICER' && user.woredaId && existing.woredaId !== user.woredaId) {
-      throw new ForbiddenError('Access denied: Farm is outside your woreda jurisdiction');
-    }
-    if (role === 'ZONAL_OFFICER' && user.zoneId && existing.woreda?.zoneId !== user.zoneId) {
-      throw new ForbiddenError('Access denied: Farm is outside your zone jurisdiction');
-    }
-    if (role === 'REGIONAL_OFFICER' && user.regionId && existing.woreda?.zone?.regionId !== user.regionId) {
-      throw new ForbiddenError('Access denied: Farm is outside your region jurisdiction');
+    if (role !== 'FARMER') {
+      throw new ForbiddenError('Access denied: Deletion of farm plots is restricted to the farm owner or Super Administrator');
     }
   }
 

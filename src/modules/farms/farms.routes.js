@@ -5,11 +5,11 @@ const controller = require('./farms.controller');
 const validate = require('../../middleware/validate.middleware');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
-// POST /api/v1/farms – Register a new farm (Farmers and Agricultural Experts / DAs / Officers / Admins)
+// POST /api/v1/farms – Register a new farm (Farmers for own plot, DAs in assigned kebele, and Super Admin)
 router.post(
   '/',
   authenticate,
-  authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'),
+  authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'),
   [
     body('farmName')
       .trim()
@@ -79,7 +79,7 @@ router.get('/:id', authenticate, controller.getFarmDetails);
 router.put(
   '/:id',
   authenticate,
-  authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'),
+  authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'),
   [
     body('farmName').optional().trim().notEmpty().withMessage('farmName cannot be empty').isLength({ max: 200 }),
     body('primaryCrop').optional().isString().trim().notEmpty(),
@@ -97,7 +97,7 @@ router.put(
 router.patch(
   '/:id',
   authenticate,
-  authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'),
+  authorize('FARMER', 'DEVELOPMENT_AGENT', 'ADMIN'),
   [
     body('farmName').optional().trim().notEmpty().withMessage('farmName cannot be empty').isLength({ max: 200 }),
     body('primaryCrop').optional().isString().trim().notEmpty(),
@@ -122,8 +122,8 @@ router.get('/:id/planning/calendar', authenticate, controller.authorizeFarmAcces
 router.get('/:id/analytics', authenticate, controller.authorizeFarmAccess, controller.getFarmAnalytics);
 router.get('/:id/benchmarks', authenticate, controller.authorizeFarmAccess, controller.getFarmBenchmarks);
 
-// DELETE /api/v1/farms/:id – Delete a farm plot
-router.delete('/:id', authenticate, authorize('FARMER', 'DEVELOPMENT_AGENT', 'WOREDA_OFFICER', 'ZONAL_OFFICER', 'REGIONAL_OFFICER', 'ADMIN'), controller.deleteFarm);
+// DELETE /api/v1/farms/:id – Delete a farm plot (Strictly Farmer owner or Super Admin)
+router.delete('/:id', authenticate, authorize('FARMER', 'ADMIN'), controller.deleteFarm);
 
 module.exports = router;
 
