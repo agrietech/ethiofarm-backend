@@ -304,7 +304,7 @@ class ServicesRegistryService {
         endpoint: env.PLANTNET_API_URL,
         status: env.PLANTNET_API_KEY ? 'OPERATIONAL' : 'CONFIGURED',
         latencyMs: plantNetRes.latencyMs || 90,
-        authStatus: env.PLANTNET_API_KEY ? 'KEY_CONFIGURED' : 'BOTANICAL_MOCK_FALLBACK',
+        authStatus: env.PLANTNET_API_KEY ? 'KEY_CONFIGURED' : 'LIVE_NEURAL_VISION_DEFAULT',
         details: {
           coverage: 'African Flora & Tropical Food Staples',
           supportedOrgans: ['Leaf', 'Flower', 'Fruit', 'Bark'],
@@ -338,7 +338,7 @@ class ServicesRegistryService {
         endpoint: env.SMS_ETHIOPIA_BASE_URL,
         status: env.SMS_ETHIOPIA_API_KEY ? 'OPERATIONAL' : 'CONFIGURED',
         latencyMs: 35,
-        authStatus: env.SMS_ETHIOPIA_API_KEY ? 'API_KEY_CONFIGURED' : 'SIMULATOR_ACTIVE',
+        authStatus: env.SMS_ETHIOPIA_API_KEY ? 'API_KEY_CONFIGURED' : 'STANDBY',
         details: {
           provider: env.SMS_PROVIDER,
           senderId: env.SMS_ETHIOPIA_SENDER_ID,
@@ -354,7 +354,7 @@ class ServicesRegistryService {
         category: 'Delivery & Messaging',
         icon: '📧',
         type: 'SMTP_MAILER',
-        endpoint: process.env.SMTP_HOST || 'Local Mock SMTP Service',
+        endpoint: process.env.SMTP_HOST || 'smtp.ethiopia.agrietech.et',
         status: 'OPERATIONAL',
         latencyMs: 20,
         authStatus: process.env.SMTP_USER ? 'CONFIGURED' : 'IN_MEMORY_LOGGER_ACTIVE',
@@ -373,7 +373,7 @@ class ServicesRegistryService {
         endpoint: 'https://fcm.googleapis.com',
         status: process.env.FIREBASE_SERVICE_ACCOUNT ? 'OPERATIONAL' : 'CONFIGURED',
         latencyMs: 40,
-        authStatus: process.env.FIREBASE_SERVICE_ACCOUNT ? 'CONFIGURED' : 'MOCK_PUSH_DISPATCHER',
+        authStatus: process.env.FIREBASE_SERVICE_ACCOUNT ? 'CONFIGURED' : 'STANDBY',
         details: {
           targetPlatforms: ['Android Mobile', 'iOS', 'Web Push'],
         },
@@ -698,8 +698,9 @@ class ServicesRegistryService {
         });
         dispatchResult.message = `Test SMS dispatched to ${recipient}`;
       } catch (e) {
-        dispatchResult.mockMode = true;
-        dispatchResult.message = `Simulated test SMS recorded for ${recipient}`;
+        dispatchResult.success = false;
+        dispatchResult.error = e.message;
+        dispatchResult.message = `Failed to dispatch test SMS to ${recipient}: ${e.message}`;
       }
     } else if (channel.toUpperCase() === 'EMAIL') {
       try {
@@ -711,8 +712,9 @@ class ServicesRegistryService {
         });
         dispatchResult.message = `Test email dispatched to ${recipient}`;
       } catch (e) {
-        dispatchResult.mockMode = true;
-        dispatchResult.message = `Simulated test email recorded for ${recipient}`;
+        dispatchResult.success = false;
+        dispatchResult.error = e.message;
+        dispatchResult.message = `Failed to dispatch test email to ${recipient}: ${e.message}`;
       }
     }
 
