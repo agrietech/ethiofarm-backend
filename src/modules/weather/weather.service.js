@@ -7,6 +7,7 @@ const redis = require('../../config/redis');
 const { getWoredaCoordinates, getZoneCoordinates, getRegionCoordinates, resolveWoredaByCoords } = require('../boundaries/boundaries.service');
 const openWeatherMapConnector = require('../../ingestion/connectors/openWeatherMapConnector');
 const worldBankClimateConnector = require('../../ingestion/connectors/worldBankClimateConnector');
+const { NotFoundError } = require('../../utils/errors');
 
 // ── In-Memory L1 Weather Cache & Ethiopian Hourly Timezone Helpers ──────────
 const l1WeatherCache = new Map();
@@ -107,18 +108,22 @@ function resolveWeatherDetails(code) {
  */
 async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regionId, lat, lng, user } = {}) {
   const safeUser = user || {};
+  const userRole = (safeUser.role || '').toUpperCase();
 
   // 1. Farm Level (Hyper-local precision down to farm plot boundaries)
-  let targetFarmId = farmId || (safeUser.role === 'FARMER' ? (safeUser.farmId || safeUser.primaryFarmId) : null);
-  if (!targetFarmId && safeUser.role === 'FARMER' && safeUser.id) {
-    try {
-      const uFarm = await prisma.farm.findFirst({
-        where: { userId: safeUser.id },
-        select: { id: true },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (uFarm) targetFarmId = uFarm.id;
-    } catch (_e) {}
+  let targetFarmId = farmId;
+  if (!targetFarmId && userRole === 'FARMER' && !kebeleId && !woredaId && !zoneId && !regionId && !lat && !lng) {
+    targetFarmId = safeUser.farmId || safeUser.primaryFarmId;
+    if (!targetFarmId && safeUser.id) {
+      try {
+        const uFarm = await prisma.farm.findFirst({
+          where: { userId: safeUser.id },
+          select: { id: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (uFarm) targetFarmId = uFarm.id;
+      } catch (_e) {}
+    }
   }
 
   if (targetFarmId) {
@@ -178,25 +183,13 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
       logger.warn(`[WeatherService] Farm resolution error for '${targetFarmId}': ${err.message}`);
     }
 
-    // Resilient fallback if DB connection times out or test ID used
-    return {
-      level: 'FARM',
-      id: targetFarmId,
-      farmId: targetFarmId,
-      farmName: 'Local Farmland Plot',
-      nameEn: 'Local Farm Plot',
-      nameAm: 'የአካባቢው እርሻ',
-      lat: 8.54,
-      lng: 39.27,
-      woredaId: safeUser.woredaId || 'ET040101',
-      woredaName: 'Adama Zuria',
-      elevationMeters: 1920,
-      agroZone: 'WEINA_DEGA',
-    };
+    if (farmId) {
+      throw new NotFoundError(`Farm with ID '${farmId}' was not found in the agricultural registry.`, 'FARM_NOT_FOUND');
+    }
   }
 
   // 2. Kebele Level (Sub-district administrative level for Development Agents)
-  const targetKebeleId = kebeleId || (safeUser.role === 'DEVELOPMENT_AGENT' ? safeUser.kebeleId : null);
+  const targetKebeleId = kebeleId || (userRole === 'DEVELOPMENT_AGENT' && !woredaId && !zoneId && !regionId && !lat && !lng ? safeUser.kebeleId : null);
   if (targetKebeleId) {
     try {
       const kebele = await prisma.kebele.findUnique({
@@ -241,17 +234,9 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
       logger.warn(`[WeatherService] Kebele resolution error for '${targetKebeleId}': ${err.message}`);
     }
 
-    return {
-      level: 'KEBELE',
-      id: targetKebeleId,
-      kebeleId: targetKebeleId,
-      nameEn: safeUser.kebeleName ? `${safeUser.kebeleName} Kebele` : 'Kebele Extension Area',
-      nameAm: 'ቀበሌ እርሻ ማዕከል',
-      lat: 8.54,
-      lng: 39.27,
-      elevationMeters: 1850,
-      agroZone: 'WEINA_DEGA',
-    };
+    if (kebeleId) {
+      throw new NotFoundError(`Kebele with ID '${kebeleId}' was not found in the administrative registry.`, 'KEBELE_NOT_FOUND');
+    }
   }
 
   // 3. Exact GPS Coordinates (Field plot or mobile GPS)
@@ -277,27 +262,8 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
     };
   }
 
-  // 4. Woreda Level (Woreda Officers & Woreda-scoped users)
-  const targetWoredaId = woredaId || (safeUser.role === 'WOREDA_OFFICER' ? safeUser.woredaId : null) || safeUser.woredaId;
-  if (targetWoredaId) {
-    try {
-      const w = await getWoredaCoordinates(targetWoredaId);
-      return {
-        level: 'WOREDA',
-        id: w.id,
-        woredaId: w.id,
-        nameEn: `${w.nameEn} Woreda`,
-        nameAm: `${w.nameAm || w.nameEn} ወረዳ`,
-        lat: w.lat,
-        lng: w.lng,
-      };
-    } catch (err) {
-      logger.warn(`[WeatherService] Woreda resolution error for '${targetWoredaId}': ${err.message}`);
-    }
-  }
-
-  // 5. Zone Level (Zonal Officers & Zonal Scope)
-  const targetZoneId = zoneId || (safeUser.role === 'ZONAL_OFFICER' ? safeUser.zoneId : null) || safeUser.zoneId;
+  // 4. Zone Level (Explicit zone query OR Zonal Officer's Assigned Zone)
+  const targetZoneId = zoneId || (userRole === 'ZONAL_OFFICER' && !woredaId && !regionId ? safeUser.zoneId : null);
   if (targetZoneId) {
     try {
       const z = await getZoneCoordinates(targetZoneId);
@@ -316,10 +282,14 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
     } catch (err) {
       logger.warn(`[WeatherService] Zone resolution error for '${targetZoneId}': ${err.message}`);
     }
+
+    if (zoneId) {
+      throw new NotFoundError(`Administrative Zone with ID '${zoneId}' was not found.`, 'ZONE_NOT_FOUND');
+    }
   }
 
-  // 6. Region Level (Regional Officers & Regional Scope)
-  const targetRegionId = regionId || (safeUser.role === 'REGIONAL_OFFICER' ? safeUser.regionId : null) || safeUser.regionId;
+  // 5. Region Level (Explicit region query OR Regional Officer's Assigned Region)
+  const targetRegionId = regionId || (userRole === 'REGIONAL_OFFICER' && !woredaId ? safeUser.regionId : null);
   if (targetRegionId) {
     try {
       const r = await getRegionCoordinates(targetRegionId);
@@ -336,6 +306,35 @@ async function resolveTargetLocation({ farmId, kebeleId, woredaId, zoneId, regio
       }
     } catch (err) {
       logger.warn(`[WeatherService] Region resolution error for '${targetRegionId}': ${err.message}`);
+    }
+
+    if (regionId) {
+      throw new NotFoundError(`Administrative Region with ID '${regionId}' was not found.`, 'REGION_NOT_FOUND');
+    }
+  }
+
+  // 6. Woreda Level (Explicit woreda query OR Woreda Officer's Assigned Woreda OR fallback user woreda)
+  const targetWoredaId = woredaId || (userRole === 'WOREDA_OFFICER' ? safeUser.woredaId : null) || safeUser.woredaId;
+  if (targetWoredaId) {
+    try {
+      const w = await getWoredaCoordinates(targetWoredaId);
+      if (w) {
+        return {
+          level: 'WOREDA',
+          id: w.id,
+          woredaId: w.id,
+          nameEn: `${w.nameEn} Woreda`,
+          nameAm: `${w.nameAm || w.nameEn} ወረዳ`,
+          lat: w.lat,
+          lng: w.lng,
+        };
+      }
+    } catch (err) {
+      logger.warn(`[WeatherService] Woreda resolution error for '${targetWoredaId}': ${err.message}`);
+    }
+
+    if (woredaId) {
+      throw new NotFoundError(`Woreda with ID '${woredaId}' was not found.`, 'WOREDA_NOT_FOUND');
     }
   }
 
@@ -454,7 +453,7 @@ async function getWeatherForecast({
         timezone: 'Africa/Addis_Ababa',
         forecast_days: requestedDays,
       },
-      timeout: 10000,
+      timeout: 8000,
     });
     openMeteoData = omRes.data;
   } catch (err) {
@@ -598,6 +597,10 @@ async function getWeatherForecast({
       sunset: null,
       timestamp: new Date().toISOString(),
     };
+  }
+
+  if (current) {
+    current.temperature = current.temperatureC;
   }
 
   // 7. Structure Hourly Forecast (24 Hours from current hour in Africa/Addis_Ababa)
