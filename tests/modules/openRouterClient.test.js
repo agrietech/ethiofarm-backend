@@ -3,7 +3,7 @@ const openRouterClient = require('../../src/utils/openRouterClient');
 describe('OpenRouter Gemini 2.5 Flash Client Suite', () => {
   it('should initialize with correct default configuration', () => {
     expect(openRouterClient.model).toBeDefined();
-    expect(openRouterClient.baseUrl).toContain('openrouter.ai');
+    expect(openRouterClient.baseUrl).toContain('googleapis.com');
   });
 
   it('should perform chat completion or intelligent fallback', async () => {
