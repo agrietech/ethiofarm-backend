@@ -63,6 +63,7 @@ const env = {
   GLOFAS_API_KEY: process.env.GLOFAS_API_KEY,
   EARTHDATA_BEARER_TOKEN: process.env.EARTHDATA_BEARER_TOKEN,
   GEE_PROJECT_ID: process.env.GEE_PROJECT_ID || 'agrietech',
+  GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY || '',
   GEE_SERVICE_ACCOUNT_EMAIL: process.env.GEE_SERVICE_ACCOUNT_EMAIL || '',
   GEE_PRIVATE_KEY: process.env.GEE_PRIVATE_KEY || '',
   PLANT_ID_API_KEY: process.env.PLANT_ID_API_KEY,
@@ -71,16 +72,13 @@ const env = {
   PLANTNET_API_URL: process.env.PLANTNET_API_URL || 'https://my-api.plantnet.org/v2',
   PERENUAL_API_KEY: process.env.PERENUAL_API_KEY,
   PERENUAL_API_URL: process.env.PERENUAL_API_URL || 'https://perenual.com/api',
-  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
-  OPENROUTER_API_KEYS: process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY || '',
-  OPENROUTER_API_KEYS_LIST: Array.from(new Set(
-    (process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY || '')
-      .split(',')
-      .map((k) => k.trim())
-      .filter((k) => k && k.length > 5)
-  )),
-  OPENROUTER_MODEL: process.env.OPENROUTER_MODEL || 'minimax/minimax-m3:free',
-  OPENROUTER_BASE_URL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+  GEMINI_BASE_URL: process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta',
+  OPENROUTER_API_KEY: '',
+  OPENROUTER_API_KEYS: '',
+  OPENROUTER_API_KEYS_LIST: [],
+  OPENROUTER_MODEL: 'google/gemini-3.5-flash-lite',
+  OPENROUTER_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta',
   OPENROUTER_SITE_URL: process.env.OPENROUTER_SITE_URL || process.env.APP_URL || 'https://ethiofarm.et',
   OPENROUTER_SITE_NAME: process.env.OPENROUTER_SITE_NAME || 'EthioFarm Smart Farming Platform',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_KEY || '',
