@@ -39,7 +39,7 @@
 4. **Last-Mile Delivery & Multilingual Communications**:
    - **Emergency SMS Broadcast**: High-delivery telecom-integrated engine dispatching weather forecasts, market prices, and pest emergency alerts.
    - **SMS Character Budgeter**: Live detection of GSM 7-bit (160 chars) vs. UCS-2 Unicode (70 chars) with Amharic and Afaan Oromoo templates.
-   - **Multimodal AI Agronomy**: Gemini 2.5 Flash on OpenRouter for botanical disease triage (Teff rust, Coffee leaf rust) with offline fallback.
+   - **Multimodal AI Agronomy**: Google Gemini AI Studio 4-key pool for botanical disease triage (Teff rust, Coffee leaf rust) with offline fallback.
 
 5. **7-Tier Agricultural Role-Based Access Control (RBAC)**:
    - Aligned with the Ethiopian Ministry of Agriculture governance structure:
@@ -68,7 +68,7 @@
 │  ├─────────────────────────┤  ├─────────────────────────────────────┤  │
 │  │ RUSLE Soil Loss Engine  │  │ Multi-Hazard Predictor (6 Pillars)  │  │
 │  ├─────────────────────────┤  ├─────────────────────────────────────┤  │
-│  │ IoT Sensor Ingestion    │  │ Multimodal AI Agronomy (OpenRouter) │  │
+│  │ IoT Sensor Ingestion    │  │ Multimodal AI Agronomy (Gemini)     │  │
 │  └─────────────────────────┘  └─────────────────────────────────────┘  │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
@@ -132,7 +132,7 @@ npm test
 
 | Engineer | Student ID | Formal Engineering Role | Assigned System Deliverables | Project Domain Focus |
 | :--- | :--- | :--- | :--- | :--- |
-| **Abraham Amogne** | `CTC-329-26` | **Team Leader · System Architect** | System Architecture, Express API Gateway, PostgreSQL PostGIS schemas and migrations, 7-tier geographic RBAC middleware, Google Earth Engine satellite connector, USGS Joyner-Boore seismology engine, RUSLE soil loss equations, Master Multi-Hazard Composite Predictor, Socket.IO real-time alert gateway, and notification dispatch engines. | `agriEtech-backend`<br>`agriEtech-frontend`<br>`ethiofarm-web` |
+| **Abraham Amogne** | `CTC-329-26` | **Team Leader · System Architect** | System Architecture, Express API Gateway, PostgreSQL PostGIS schemas and migrations, 7-tier geographic RBAC middleware, Google Earth Engine satellite connector, USGS Joyner-Boore seismology engine, RUSLE soil loss equations, Master Multi-Hazard Composite Predictor, Socket.IO real-time alert gateway, and notification dispatch engines. | `ethiofarm-backend`<br>`ethiofarm-frontend`<br>`ethiofarm-web` |
 | **Alen Biruk** | `CTC-2176-26` | **Web Platform Engineer** | Farm Operations & IoT Soil Sensor Fleet, OCHA HDX boundary GeoJSON indexing, farm polygon validation, and ground sensor telemetry. | `ethiofarm-web` (Farm Operations) |
 | **Zinegnaw** | `CTC-514-26` | **Web Platform Engineer** | Crop AI Vision & Pathology, camera viewfinder capture, multipart botanical photo analysis, and plant disease triage services. | `ethiofarm-web` (Crop Pathology) |
 | **Banchamlak Golla** | `CTC-2952-26` | **Web Platform Engineer** | Agro-Meteorology & Alerts, Open-Meteo weather telemetry caching, Copernicus GloFAS river discharge, and multi-hazard alert notifications. | `ethiofarm-web` (Weather & Hazards) |

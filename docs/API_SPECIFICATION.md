@@ -1,7 +1,7 @@
 # EthioFarm Multi-Hazard Early Warning Platform - API Specification
 
 **Version:** 1.0.0  
-**Base URL:** `http://localhost:5000/api/v1` (Production: `https://ethiofarm.onrender.com/api/v1`)  
+**Base URL:** `http://localhost:5000/api/v1` | **Production:** `https://ethiofarm.onrender.com/api/v1`  
 **Format:** JSON (`Content-Type: application/json`)  
 **Authentication:** HTTP Bearer Token (`Authorization: Bearer <jwt_token>`)
 
