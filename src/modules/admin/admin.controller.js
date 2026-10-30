@@ -252,6 +252,7 @@ async function getAuditLogs(req, res, next) {
 function renderDashboard(_req, res) {
     const fs = require('fs');
     const path = require('path');
+    const env = require('../../config/env');
 
     const dashboardPath = path.join(__dirname, 'templates', 'dashboard.html');
 
@@ -261,8 +262,10 @@ function renderDashboard(_req, res) {
             return res.status(500).send('Dashboard template not found');
         }
 
+        const sanitizedHtml = html.replace('{{GOOGLE_MAPS_API_KEY}}', env.GOOGLE_MAPS_API_KEY || '');
+
         res.setHeader('Content-Type', 'text/html');
-        res.status(200).send(html);
+        res.status(200).send(sanitizedHtml);
     });
 }
 
