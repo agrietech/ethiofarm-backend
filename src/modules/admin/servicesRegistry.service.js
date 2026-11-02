@@ -5,7 +5,6 @@ const env = require('../../config/env');
 const { prisma, isConnected } = require('../../config/db');
 const redis = require('../../config/redis');
 const logger = require('../../utils/logger');
-const { getQueueStats, addJob } = require('../../ingestion/jobs/queue');
 
 /**
  * Utility helper to measure HTTP/HTTPS latency for external endpoints

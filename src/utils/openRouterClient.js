@@ -3,7 +3,7 @@ const env = require('../config/env');
 const logger = require('./logger');
 
 // Model assignment mapping for the configured key pool slots
-const SLOT_MODEL_PAIRINGS = [
+const _SLOT_MODEL_PAIRINGS = [
   'nvidia/nemotron-3.5-lightning:free',
   'google/gemma-4-26b-a4b-it:free',
   'dots-studio/dots-3-note-preview:free',
@@ -211,15 +211,15 @@ class OpenRouterClient {
    * automatic failover, reasoning token support & resilient model cascades.
    */
   async chatCompletion(args = {}, legacyOptions = {}) {
-    let messages, temperature, responseFormat, maxTokens, model, enableReasoning;
+    let messages, temperature, responseFormat, maxTokens, _model, _enableReasoning;
     if (Array.isArray(args)) {
       messages = args;
       ({
         temperature = 0.2,
         responseFormat = null,
         maxTokens = 300,
-        model = null,
-        enableReasoning = false,
+        _model = null,
+        _enableReasoning = false,
       } = legacyOptions);
     } else {
       ({
@@ -227,8 +227,8 @@ class OpenRouterClient {
         temperature = 0.2,
         responseFormat = null,
         maxTokens = 300,
-        model = null,
-        enableReasoning = false,
+        _model = null,
+        _enableReasoning = false,
       } = args);
     }
     messages = messages || [];
@@ -326,7 +326,7 @@ class OpenRouterClient {
     temperature = 0.2,
     maxTokens = 300,
     model = null,
-    enableReasoning = false,
+    _enableReasoning = false,
     onChunk = null,
   }) {
     if (!this.isConfigured()) {
@@ -940,7 +940,7 @@ CORE DIRECTIVES:
    * Evaluates any farmer question dynamically and constructs scientifically verified,
    * localized Ethiopian agricultural advisory in both Amharic and English.
    */
-  _generateDynamicVoiceResponse(queryText = '', preferredLang = 'am', userRole = 'FARMER', userJurisdiction = null) {
+  _generateDynamicVoiceResponse(queryText = '', preferredLang = 'am', _userRole = 'FARMER', userJurisdiction = null) {
     const cleanText = (queryText || '').replace(/\[farmer's crops:[^\]]*\]/gi, '').trim();
     const q = cleanText.toLowerCase();
     const isAmharicInput = /[\u1200-\u137F]/.test(cleanText);
@@ -974,7 +974,7 @@ CORE DIRECTIVES:
     };
   }
 
-  _getBilingualSynthesizedDiagnosis(cropHint = 'Wheat', plantIdData = null, plantNetData = null, perenualData = null) {
+  _getBilingualSynthesizedDiagnosis(_cropHint = 'Wheat', plantIdData = null, plantNetData = null, perenualData = null) {
     // If Pl@ntNet or Plant.id provided real botanical/disease classification, use it directly
     const plantNetTop = plantNetData?.topDisease || plantNetData?.diseases?.[0] || null;
     const perenualTop = perenualData?.topResult || perenualData?.data?.[0] || null;
