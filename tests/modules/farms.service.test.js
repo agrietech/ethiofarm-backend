@@ -79,4 +79,30 @@ describe('farm registration persistence', () => {
     await expect(farmsService.createFarm(farmInput)).rejects.toMatchObject({ statusCode: 404 });
     expect(prisma.farm.create).not.toHaveBeenCalled();
   });
+
+  it('rejects coordinates explicitly outside Ethiopia bounds', async () => {
+    const invalidCoordsInput = {
+      ...farmInput,
+      latitude: 45.0,
+      longitude: 2.0,
+    };
+    await expect(farmsService.createFarm(invalidCoordsInput)).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringMatching(/outside Ethiopia/i),
+    });
+  });
+
+  it('rejects farm creation when neither polygon nor coordinates are provided', async () => {
+    const emptyGeoInput = {
+      userId: 'user-1',
+      farmName: 'No Geo Farm',
+      primaryCrop: 'Wheat',
+      areaHectares: 1,
+      woredaId: 'woreda-1',
+    };
+    await expect(farmsService.createFarm(emptyGeoInput)).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringMatching(/polygonGeojson.*strictly required/i),
+    });
+  });
 });
