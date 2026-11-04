@@ -4,17 +4,17 @@ Welcome to the official developer documentation suite for the **EthioFarm Multi-
 
 ---
 
-## 📚 Compulsory Developer References
+## Technical Architecture References
 
 | Document | Purpose & Scope | Target Audience |
 | :--- | :--- | :--- |
 | [**Architecture Blueprint**](ARCHITECTURE.md) | High-level system architecture, layered design, Redis caching, PostGIS geodatabase, GEE pipelines, Docker deployment, and automated test execution. | System Architects & Developers |
-| [**API Specification (REST & OpenAPI)**](API_SPECIFICATION.md) | Exhaustive REST OpenAPI endpoints, query schemas, JSON request/response bodies, and error formats. | Backend & Client Developers |
+| [**API Specification**](API_SPECIFICATION.md) | Exhaustive REST OpenAPI endpoints, query schemas, JSON request/response bodies, and error formats. | Backend & Client Developers |
 | [**IoT Firmware Repository**](../firmware/README.md) | Embedded C++ sketch and hardware guide for ESP32/Arduino capacitive soil moisture and telemetry node. | Hardware Firmware Developers |
 
 ---
 
-## 🛠️ Verification & Quality Gates
+## Verification and Quality Gates
 
 ```bash
 # 1. Verify code standards with ESLint

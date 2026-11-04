@@ -4,13 +4,13 @@
 
 ---
 
-## 📋 Overview
+## Hardware Telemetry Architecture Overview
 
 The EthioFarm IoT ground telemetry fleet deploys microcontrollers across Ethiopian farm plots to capture high-frequency agro-meteorological metrics. This firmware reads analog capacitive soil moisture, digital air/soil temperature probes, and battery voltage, packaging them as JSON payloads transmitted over Wi-Fi/GSM directly to Firebase Realtime Database or the EthioFarm backend ingestion gateway.
 
 ---
 
-## 🛠️ Hardware Requirements & Pinout
+## Hardware Requirements and Pinout Topology
 
 | Component | Interface | ESP32 GPIO | Description |
 | :--- | :--- | :--- | :--- |
@@ -22,7 +22,7 @@ The EthioFarm IoT ground telemetry fleet deploys microcontrollers across Ethiopi
 
 ---
 
-## ⚙️ Calibration
+## Sensor Calibration and Analog Soil Voltage Curve
 
 Capacitive soil moisture sensors produce analog ADC voltage corresponding to dielectric permittivity:
 
@@ -33,9 +33,9 @@ Capacitive soil moisture sensors produce analog ADC voltage corresponding to die
 
 ---
 
-## 🚀 Flashing & Compilation
+## Firmware Compilation and Flashing Procedure
 
-### Using Arduino IDE:
+### Arduino IDE Flashing Procedure
 1. Install **ESP32 Board Support** via Board Manager (`esp32 by Espressif Systems`).
 2. Install required libraries from Library Manager:
    - `ArduinoJson` (v6.x or v7.x)
@@ -48,7 +48,7 @@ Capacitive soil moisture sensors produce analog ADC voltage corresponding to die
 
 ---
 
-## 📡 Remote Telemetry Integration
+## Remote Telemetry Ingestion Integration
 
 - **Firebase Realtime Database target**: `https://your-project-id.firebaseio.com/sensors/<HARDWARE_ID>.json`
 - **EthioFarm Ingestion Endpoint**: `POST /api/v1/sensors/telemetry` (Header: `x-sensor-api-key: <TOKEN>`)

@@ -82,7 +82,7 @@ Access control evaluates two sequential gates:
 
 ---
 
-## 3. Geographic Information Systems (GIS) & Farm Parcel Management
+## 3. Geographic Information Systems and Farm Parcel Management
 
 ### 3.1 Spatial Polygon Topology
 - Farm plots are represented using standard GeoJSON `Polygon` and `MultiPolygon` geometries stored in PostgreSQL `Json` columns indexed via PostGIS GIST spatial indices.
@@ -99,7 +99,7 @@ Access control evaluates two sequential gates:
 
 EthioFarm integrates specialized analytical algorithms executed on scheduled ingestion batches and real-time triggers:
 
-### 4.1 Meteorological Drought Engine: Standardized Precipitation Index (SPI)
+### 4.1 Meteorological Drought Engine and Standardized Precipitation Index
 - Computes **SPI-30** (short-term agricultural moisture stress) and **SPI-90** (seasonal hydrological drought).
 - Ingests precipitation time-series from CHIRPS (Climate Hazards Group InfraRed Precipitation with Station data) and NASA POWER.
 - Fits rainfall data to a two-parameter Gamma distribution $\Gamma(\alpha, \beta)$ and transforms cumulative probability into standard normal distribution quantiles $Z \sim \mathcal{N}(0, 1)$:
@@ -109,7 +109,7 @@ EthioFarm integrates specialized analytical algorithms executed on scheduled ing
   - $-1.50 \ge \text{SPI} > -1.99$: Severely Dry
   - $\text{SPI} \le -2.00$: Extremely Dry (triggers automated Emergency Drought Alert)
 
-### 4.2 Soil Degradation & Erosion Engine: RUSLE Model
+### 4.2 Soil Degradation and Erosion Prediction Engine
 Calculates potential annual soil loss $A$ (metric tons/hectare/year) via the Revised Universal Soil Loss Equation:
 $$A = R \times K \times LS \times C \times P$$
 - **$R$ (Rainfall Erosivity Factor)**: Derived from monthly and annual precipitation intensity indices ($MJ \cdot mm \cdot ha^{-1} \cdot h^{-1} \cdot yr^{-1}$).
@@ -161,7 +161,7 @@ The platform features an automated ingestion service interfacing with satellite 
 
 ## 6. Artificial Intelligence & Multimodal Reasoning Infrastructure
 
-### 6.1 Google Gemini AI Studio 4-Key Pool (`geminiClient.js`)
+### 6.1 Google Gemini Multi-Key Client Pool
 To ensure high availability, zero latency bottlenecks, and zero API disruption:
 1. **Google Gemini AI Studio 4-Key Pool**: Distributed key pool (`GEMINI_API_KEY`, `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, `GEMINI_API_KEY_4`) providing 6,000 free requests/day with automated round-robin rotation, exponential backoff, and temporary 60-second rate-limit quarantine upon HTTP 429.
 2. **Model Selection**: Primary engine defaults to `gemini-3.5-flash-lite`, with automatic fallback to `gemini-3.8-flash` and `gemini-flash-lite-latest`.
