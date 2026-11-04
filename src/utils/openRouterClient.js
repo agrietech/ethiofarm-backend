@@ -235,7 +235,7 @@ class OpenRouterClient {
 
     // 0. Direct Google Gemini Multi-Account Pool Integration (1,500 free requests/day per account)
     if (this.geminiKeyPool && this.geminiKeyPool.length > 0 && messages.length > 0) {
-      const geminiCandidateModels = ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.5-flash', 'gemini-3.8-flash'];
+      const geminiCandidateModels = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
       const geminiContent = messages
         .map((m) => `${(m.role || 'user').toUpperCase()}: ${typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.map(c => c.text || '').filter(Boolean).join(' ') : JSON.stringify(m.content))}`)
         .join('\n\n');
@@ -335,7 +335,7 @@ class OpenRouterClient {
       return { success: true, content: fallback.content, isOfflineFallback: true };
     }
 
-    const geminiCandidateModels = ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.8-flash'];
+    const geminiCandidateModels = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
     const geminiContent = (messages || [])
       .map((m) => `${(m.role || 'user').toUpperCase()}: ${typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.map(c => c.text || '').filter(Boolean).join(' ') : JSON.stringify(m.content))}`)
       .join('\n\n');
@@ -494,9 +494,9 @@ Required JSON format:
     if (this.geminiKeyPool && this.geminiKeyPool.length > 0) {
       const geminiVisionModels = [
         'gemini-3.5-flash-lite',
-        'gemini-flash-lite-latest',
-        'gemini-3.5-flash',
         'gemini-3.8-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-2.5-flash',
       ];
       const userTextPrompt = `Analyze this Ethiopian crop disease sample. Return ONLY a single valid JSON object following the requested schema.
 Crop Hint: ${cropHint || 'Unknown'}.
