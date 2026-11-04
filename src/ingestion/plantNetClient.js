@@ -63,7 +63,7 @@ class PlantNetClient {
       form.append('organs', organ || 'leaf');
 
       const targetUrl = `${this.baseUrl.replace(/\/$/, '')}/diseases/identify?include-related-images=true&api-key=${this.apiKey}`;
-      const timeoutMs = 2500;
+      const timeoutMs = process.env.NODE_ENV === 'test' ? 3500 : 15000;
 
       const response = await axios.post(targetUrl, form, {
         headers: form.getHeaders(),

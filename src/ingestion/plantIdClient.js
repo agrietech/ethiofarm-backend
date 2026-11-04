@@ -45,7 +45,7 @@ class PlantIdClient {
           const imgResponse = await axios.get(imageUrl, {
             responseType: 'arraybuffer',
             headers: { 'User-Agent': 'EthioFarm-BotanicalClient/1.0' },
-            timeout: 2500,
+            timeout: process.env.NODE_ENV === 'test' ? 3500 : 10000,
           });
           base64Data = Buffer.from(imgResponse.data).toString('base64');
         } catch (_fetchErr) {
@@ -82,7 +82,7 @@ class PlantIdClient {
             'Api-Key': this.apiKey,
             'Content-Type': 'application/json',
           },
-          timeout: 2500,
+          timeout: process.env.NODE_ENV === 'test' ? 3500 : 15000,
         });
 
         return this._parsePlantIdV3Response(response.data, cropHint);
@@ -102,7 +102,7 @@ class PlantIdClient {
 
         const response = await axios.post(targetUrl, payload, {
           headers: { 'Content-Type': 'application/json' },
-          timeout: 2500,
+          timeout: process.env.NODE_ENV === 'test' ? 3500 : 15000,
         });
 
         return this._parsePlantIdV2Response(response.data, cropHint);

@@ -29,40 +29,40 @@ services:
       - key: CORS_ORIGIN
         # Allow web frontend domains and native apps (supports comma-separated list of domains)
         value: https://agrietech.onrender.com,https://agrietech-web.onrender.com,https://ethiofarm-admin.onrender.com
-      - key: OPENROUTER_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_API_KEY_2
+        sync: false
+      - key: GEMINI_API_KEY_3
+        sync: false
+      - key: GEMINI_API_KEY_4
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta
       - key: OPENWEATHER_API_KEY
         sync: false
-      - key: GLOFAS_API_KEY
-        sync: false
-      - key: EARTHDATA_BEARER_TOKEN
-        sync: false
       - key: PLANT_ID_API_KEY
-        sync: false
-      - key: AFRICAS_TALKING_API_KEY
-        sync: false
-      - key: FIREBASE_PROJECT_ID
-        sync: false
-      - key: REDIS_URL
-        sync: false
-      - key: REDIS_HOST
-        sync: false
-      - key: REDIS_PASSWORD
-        sync: false
-      - key: REDIS_TLS
-        value: "true"
-      - key: SUPABASE_POOLER_HOST
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: PLANTNET_API_KEY
         sync: false
       - key: PERENUAL_API_KEY
         sync: false
-      - key: OPENROUTER_API_KEYS
+      - key: REDIS_URL
         sync: false
-      - key: OPENROUTER_MODEL
-        value: minimax/minimax-m3:free
+      - key: REDIS_TLS
+        value: "true"
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET_DIAGNOSES
+        value: diagnose
+      - key: SUPABASE_BUCKET_AUDIO
+        value: audio
+      - key: GEE_PROJECT_ID
+        sync: false
+      - key: GEE_SERVICE_ACCOUNT_EMAIL
+        sync: false
       - key: SMS_PROVIDER
         value: smsethiopia
       - key: SMS_ETHIOPIA_API_KEY

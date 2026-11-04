@@ -3,7 +3,7 @@ const env = require('../config/env');
 const logger = require('./logger');
 
 // Model assignment mapping for the configured key pool slots
-const SLOT_MODEL_PAIRINGS = [
+const _SLOT_MODEL_PAIRINGS = [
   'nvidia/nemotron-3.5-lightning:free',
   'google/gemma-4-26b-a4b-it:free',
   'dots-studio/dots-3-note-preview:free',
@@ -17,21 +17,25 @@ const SLOT_MODEL_PAIRINGS = [
  */
 class OpenRouterClient {
   constructor() {
-    this.apiKeys = (env.OPENROUTER_API_KEYS_LIST && env.OPENROUTER_API_KEYS_LIST.length > 0)
-      ? env.OPENROUTER_API_KEYS_LIST
-      : (env.OPENROUTER_API_KEY ? [env.OPENROUTER_API_KEY] : []);
-    this.apiKey = this.apiKeys[0] || '';
-    this.model = env.OPENROUTER_MODEL || 'google/gemma-4-26b-a4b-it:free';
-    this.baseUrl = env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
-    this.appUrl = env.OPENROUTER_SITE_URL || env.APP_URL || 'https://agrietech.onrender.com';
-    this.siteName = env.OPENROUTER_SITE_NAME || 'EthioFarm Smart Farming Platform';
-
-    // Multi-Account Direct Google Gemini Pool (1,500 req/day per account)
+    // Multi-Account Direct Google Gemini AI Studio Pool (1,500 free req/day per account)
     const rawGeminiKeys = (env.GEMINI_API_KEYS_LIST && env.GEMINI_API_KEYS_LIST.length > 0)
       ? env.GEMINI_API_KEYS_LIST
-      : (env.GEMINI_API_KEY ? [env.GEMINI_API_KEY] : []);
-    this.geminiKeys = rawGeminiKeys.filter((k) => typeof k === 'string' && k.length > 15);
+      : [
+          env.GEMINI_API_KEY,
+          process.env.GEMINI_API_KEY_2,
+          process.env.GEMINI_API_KEY_3,
+          process.env.GEMINI_API_KEY_4,
+          process.env.GEMINI_API_KEY_5,
+        ].filter(Boolean);
+    this.geminiKeys = Array.from(new Set(rawGeminiKeys.filter((k) => typeof k === 'string' && k.length > 15)));
     this.geminiApiKey = this.geminiKeys[0] || '';
+    this.apiKeys = this.geminiKeys;
+    this.apiKey = this.geminiApiKey;
+
+    this.model = env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+    this.baseUrl = env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
+    this.appUrl = env.APP_URL || 'https://ethiofarm.et';
+    this.siteName = 'EthioFarm Smart Farming Platform';
     this.groqApiKey = process.env.GROQ_API_KEY || '';
 
     this.geminiKeyPool = this.geminiKeys.map((key, index) => ({
@@ -45,22 +49,8 @@ class OpenRouterClient {
       rateLimitCount: 0,
       lastUsedAt: 0,
     }));
+    this.keyPool = this.geminiKeyPool;
     this._geminiRoundRobinIdx = 0;
-
-    // Enterprise Key Pool with health tracking, dedicated model mapping and auto-quarantine
-    this.keyPool = this.apiKeys.map((key, index) => ({
-      id: `key_${index + 1}`,
-      key,
-
-      masked: `${key.slice(0, 14)}...${key.slice(-4)}`,
-      dedicatedModel: SLOT_MODEL_PAIRINGS[index] || this.model,
-      active: true,
-      cooldownUntil: 0,
-      successCount: 0,
-      errorCount: 0,
-      rateLimitCount: 0,
-      lastUsedAt: 0,
-    }));
     this._roundRobinIdx = 0;
   }
 
@@ -221,15 +211,15 @@ class OpenRouterClient {
    * automatic failover, reasoning token support & resilient model cascades.
    */
   async chatCompletion(args = {}, legacyOptions = {}) {
-    let messages, temperature, responseFormat, maxTokens, model, enableReasoning;
+    let messages, temperature, responseFormat, maxTokens, _model, _enableReasoning;
     if (Array.isArray(args)) {
       messages = args;
       ({
         temperature = 0.2,
         responseFormat = null,
         maxTokens = 300,
-        model = null,
-        enableReasoning = false,
+        _model = null,
+        _enableReasoning = false,
       } = legacyOptions);
     } else {
       ({
@@ -237,20 +227,21 @@ class OpenRouterClient {
         temperature = 0.2,
         responseFormat = null,
         maxTokens = 300,
-        model = null,
-        enableReasoning = false,
+        _model = null,
+        _enableReasoning = false,
       } = args);
     }
     messages = messages || [];
 
     // 0. Direct Google Gemini Multi-Account Pool Integration (1,500 free requests/day per account)
     if (this.geminiKeyPool && this.geminiKeyPool.length > 0 && messages.length > 0) {
-      const geminiCandidateModels = ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.5-flash', 'gemini-3.8-flash'];
+      const geminiCandidateModels = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
       const geminiContent = messages
         .map((m) => `${(m.role || 'user').toUpperCase()}: ${typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.map(c => c.text || '').filter(Boolean).join(' ') : JSON.stringify(m.content))}`)
         .join('\n\n');
 
-      const maxAttempts = Math.min(this.geminiKeyPool.length, 5);
+      let lastError = null;
+      const maxAttempts = Math.min(this.geminiKeyPool.length, 6);
       const geminiStartTime = Date.now();
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         if (Date.now() - geminiStartTime > 28000) break;
@@ -288,12 +279,13 @@ class OpenRouterClient {
               };
             }
           } catch (geminiErr) {
+            lastError = geminiErr;
             const statusCode = geminiErr.response?.status;
             const errMsg = geminiErr.response?.data?.error?.message || geminiErr.message;
             if (statusCode !== 404) {
               this._markGeminiKeyError(keyObj, statusCode, errMsg);
             }
-            logger.warn(`[OpenRouterClient] Direct Google Gemini (${gModel} - ${keyObj.id}) attempt notice: ${errMsg}`);
+            logger.warn(`[GeminiClient] Google Gemini AI Studio (${gModel} - ${keyObj.id}) notice: ${errMsg}`);
             const isTimeout = geminiErr.code === 'ECONNABORTED' || errMsg?.toLowerCase().includes('timeout');
             if (statusCode === 429 || isTimeout) {
               // Break inner model loop to rotate to the next account key immediately
@@ -302,196 +294,14 @@ class OpenRouterClient {
           }
         }
       }
+
+      const errorMsg = lastError?.response?.data?.error?.message || lastError?.message || 'All Gemini key attempts exhausted';
+      logger.warn(`[GeminiClient] Gemini API live attempt exhausted (${errorMsg}). Utilizing dynamic offline agronomic synthesizer.`);
+      return { ...this._generateSynthesizedCompletion(messages), isOfflineFallback: true, degradedReason: errorMsg };
     }
 
-    // 0B. Direct Groq Cloud Integration (Llama-3.3 70B, ultra-fast 300 t/s)
-    if (this.groqApiKey) {
-      try {
-        const groqRes = await axios.post(
-          'https://api.groq.com/openai/v1/chat/completions',
-          {
-            model: 'llama-3.3-70b-versatile',
-            messages,
-            temperature,
-            max_tokens: maxTokens,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${this.groqApiKey}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 6000,
-          }
-        );
-        const text = groqRes.data?.choices?.[0]?.message?.content;
-        if (text && text.trim().length > 0) {
-          return {
-            success: true,
-            content: text,
-            model: 'groq/llama-3.3-70b-versatile',
-            usage: groqRes.data?.usage || null,
-          };
-        }
-      } catch (groqErr) {
-        logger.warn(`[OpenRouterClient] Direct Groq attempt notice: ${groqErr.message}`);
-      }
-    }
-
-    const primaryModel = model || this.model;
-    const candidateModels = [
-      primaryModel,
-      'nvidia/nemotron-3.5-lightning:free',
-      'google/gemma-4-26b-a4b-it:free',
-      'dots-studio/dots-3-note-preview:free',
-      'recursive/flint-v1.0:free',
-    ].filter((m, i, arr) => m && arr.indexOf(m) === i);
-
-    if (!this.isConfigured()) {
-      logger.warn('[OpenRouterClient] No AI API keys configured. Using intelligent dynamic offline synthesizer.');
-      return { ...this._generateSynthesizedCompletion(messages), isOfflineFallback: true, degradedReason: 'API key not configured' };
-    }
-
-    const executeRequestWithKey = async (targetKey, targetModel, tokens) => {
-      const payload = {
-        model: targetModel,
-        messages,
-        temperature,
-        max_tokens: tokens,
-      };
-
-      if (responseFormat === 'json' && !targetModel.includes(':free') && !targetModel.startsWith('openrouter/free')) {
-        payload.response_format = { type: 'json_object' };
-      }
-
-      if (enableReasoning) {
-        payload.reasoning = { max_tokens: Math.min(300, tokens) };
-      }
-
-      return await axios.post(`${this.baseUrl}/chat/completions`, payload, {
-        headers: {
-          Authorization: `Bearer ${targetKey.key}`,
-          'HTTP-Referer': this.appUrl,
-          'X-Title': this.siteName,
-          'Content-Type': 'application/json',
-        },
-        timeout: 6000,
-      });
-    };
-
-    let lastError = null;
-    const startTime = Date.now();
-
-    // Outer loop: Iterate through candidate models
-    for (const targetModel of candidateModels) {
-      if (Date.now() - startTime > 12000) {
-        logger.info('[OpenRouterClient] Cascade budget (12s) reached. Switching to dynamic agronomic synthesizer.');
-        break;
-      }
-      const maxKeyAttempts = 1;
-
-      for (let attempt = 0; attempt < maxKeyAttempts; attempt++) {
-        if (Date.now() - startTime > 12000) break;
-        const activeKey = this._getNextKey(targetModel);
-        if (!activeKey) break;
-
-        try {
-          let currentTokens = maxTokens;
-          let response;
-
-          try {
-            response = await executeRequestWithKey(activeKey, targetModel, currentTokens);
-          } catch (firstErr) {
-            const errorMsg = firstErr.response?.data?.error?.message || firstErr.message || '';
-            const status = firstErr.response?.status;
-
-            // Handle token budget constraints from provider
-            if (errorMsg.includes('max_tokens') || errorMsg.includes('afford')) {
-              const affordMatch = errorMsg.match(/can only afford (\d+)/i);
-              const affordableTokens = affordMatch
-                ? Math.max(30, parseInt(affordMatch[1], 10) - 5)
-                : Math.min(80, currentTokens);
-              logger.warn(`[OpenRouterClient] Token adjustment for ${targetModel} on ${activeKey.masked} (${errorMsg}). Retrying with ${affordableTokens} tokens.`);
-              response = await executeRequestWithKey(activeKey, targetModel, affordableTokens);
-            } else if ((status === 400 || status === 404) && (errorMsg.includes('image') || errorMsg.includes('vision') || errorMsg.includes('url') || errorMsg.includes('fetching') || errorMsg.includes('support image input'))) {
-              // Model does not accept image_url or image URL was not fetchable; retry immediately using text-only synthesis
-              const textOnlyMessages = messages.map((m) => {
-                if (Array.isArray(m.content)) {
-                  const textContent = m.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n');
-                  return { ...m, content: textContent };
-                }
-                return m;
-              });
-              response = await axios.post(`${this.baseUrl}/chat/completions`, {
-                model: targetModel,
-                messages: textOnlyMessages,
-                temperature,
-                max_tokens: currentTokens,
-                response_format: responseFormat === 'json' ? { type: 'json_object' } : undefined,
-              }, {
-                headers: {
-                  Authorization: `Bearer ${activeKey.key}`,
-                  'HTTP-Referer': this.appUrl,
-                  'X-Title': this.siteName,
-                  'Content-Type': 'application/json',
-                },
-                timeout: 4500,
-              });
-            } else {
-              this._markKeyError(activeKey, status, errorMsg);
-              throw firstErr;
-            }
-          }
-
-          const choice = response.data?.choices?.[0];
-          const content = choice?.message?.content || '';
-          if (content && content.trim().length > 0) {
-            this._markKeySuccess(activeKey);
-
-            // Extract reasoning tokens if present
-            const reasoningTokens = response.data?.usage?.completionTokensDetails?.reasoningTokens ||
-              response.data?.usage?.reasoning_tokens || null;
-            const reasoningDetails = choice?.message?.reasoning_details || null;
-
-            return {
-              success: true,
-              content,
-              model: response.data?.model || targetModel,
-              usage: response.data?.usage || null,
-              reasoningTokens,
-              reasoningDetails,
-              keyId: activeKey.id,
-              keyMasked: activeKey.masked,
-            };
-          }
-        } catch (err) {
-          lastError = err;
-          const status = err.response?.status;
-          const errorMsg = (err.response?.data?.error?.message || err.message || '').toLowerCase();
-          logger.warn(`[OpenRouterClient] Model ${targetModel} attempt failed with key ${activeKey.masked}: ${status || ''} ${errorMsg}`);
-
-          // If model is unreachable (502/503), not found (404), or has daily model limit (429 free-models-per-day),
-          // retrying other keys with THIS SAME MODEL won't help. Immediately break to next model!
-          if (status === 404 || status === 400 || errorMsg.includes('unreachable') || errorMsg.includes('free-models-per-day') || errorMsg.includes('no endpoints')) {
-            if (errorMsg.includes('free-models-per-day')) {
-              const now = Date.now();
-              for (const k of this.keyPool) {
-                k.cooldownUntil = now + 3600000;
-              }
-              logger.warn('[OpenRouterClient] Account reached free-models-per-day limit. Fast-switching to dynamic synthesizer.');
-              break;
-            }
-            break;
-          }
-        }
-      }
-      if (this.keyPool.every((k) => k.cooldownUntil > Date.now())) {
-        break; // All keys are in cooldown; terminate outer candidate model loop immediately
-      }
-    }
-
-    const errorMsg = lastError?.response?.data?.error?.message || lastError?.message || 'All OpenRouter key attempts exhausted';
-    logger.error(`[OpenRouterClient] All API completion attempts failed (${errorMsg}). Utilizing dynamic offline agronomic synthesizer.`);
-    return { ...this._generateSynthesizedCompletion(messages), isOfflineFallback: true, degradedReason: errorMsg };
+    logger.warn('[GeminiClient] No Gemini API keys configured. Using dynamic offline agronomic synthesizer.');
+    return { ...this._generateSynthesizedCompletion(messages), isOfflineFallback: true, degradedReason: 'No Gemini keys configured' };
   }
 
   /**
@@ -508,15 +318,15 @@ class OpenRouterClient {
   }
 
   /**
-   * Stream chat completion via OpenRouter Server-Sent Events (SSE)
-   * Supports reasoning token extraction and real-time streaming chunks with resilient cascading fallback.
+   * Stream chat completion via Google Gemini AI Studio Server-Sent Events (SSE)
+   * Streams token chunks in real time across the 4-key pool with resilient fallback.
    */
   async chatCompletionStream({
     messages,
     temperature = 0.2,
     maxTokens = 300,
     model = null,
-    enableReasoning = false,
+    _enableReasoning = false,
     onChunk = null,
   }) {
     if (!this.isConfigured()) {
@@ -525,83 +335,84 @@ class OpenRouterClient {
       return { success: true, content: fallback.content, isOfflineFallback: true };
     }
 
-    const targetModel = model || this.model;
-    const activeKey = this._getNextKey(targetModel);
+    const geminiCandidateModels = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+    const geminiContent = (messages || [])
+      .map((m) => `${(m.role || 'user').toUpperCase()}: ${typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.map(c => c.text || '').filter(Boolean).join(' ') : JSON.stringify(m.content))}`)
+      .join('\n\n');
 
-    const payload = {
-      model: targetModel,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-      stream: true,
-    };
+    const maxAttempts = Math.min(this.geminiKeyPool.length, 4);
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const keyObj = this._getNextGeminiKey();
+      if (!keyObj || !keyObj.key) break;
 
-    if (enableReasoning) {
-      payload.reasoning = { max_tokens: Math.min(300, maxTokens) };
-    }
-
-    try {
-      const response = await axios.post(`${this.baseUrl}/chat/completions`, payload, {
-        headers: {
-          Authorization: `Bearer ${activeKey.key}`,
-          'HTTP-Referer': this.appUrl,
-          'X-Title': this.siteName,
-          'Content-Type': 'application/json',
-        },
-        responseType: 'stream',
-        timeout: 15000,
-      });
-
-      return new Promise((resolve, reject) => {
-        let fullContent = '';
-        let reasoningTokens = null;
-
-        response.data.on('data', (chunk) => {
-          const lines = chunk.toString().split('\n').filter((l) => l.trim().startsWith('data: '));
-          for (const line of lines) {
-            const rawData = line.replace(/^data:\s*/, '').trim();
-            if (rawData === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(rawData);
-              const delta = parsed.choices?.[0]?.delta?.content || '';
-              if (delta) {
-                fullContent += delta;
-                if (onChunk) onChunk(delta);
-              }
-              if (parsed.usage) {
-                reasoningTokens = parsed.usage.completionTokensDetails?.reasoningTokens || null;
-              }
-            } catch (_e) {
-              // Ignore partial stream line parse errors
+      for (const gModel of geminiCandidateModels) {
+        try {
+          const sseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:streamGenerateContent?key=${encodeURIComponent(keyObj.key)}&alt=sse`;
+          const response = await axios.post(
+            sseUrl,
+            {
+              contents: [{ parts: [{ text: geminiContent }] }],
+              generationConfig: {
+                temperature,
+                maxOutputTokens: Math.max(maxTokens, 1500),
+              },
+            },
+            {
+              headers: { 'Content-Type': 'application/json' },
+              responseType: 'stream',
+              timeout: 15000,
             }
-          }
-        });
+          );
 
-        response.data.on('end', () => {
-          this._markKeySuccess(activeKey);
-          resolve({
-            success: true,
-            content: fullContent,
-            model: targetModel,
-            reasoningTokens,
-            keyUsed: activeKey.masked,
+          return await new Promise((resolve, reject) => {
+            let fullContent = '';
+            response.data.on('data', (chunk) => {
+              const lines = chunk.toString().split('\n').filter((l) => l.trim().startsWith('data: '));
+              for (const line of lines) {
+                const rawData = line.replace(/^data:\s*/, '').trim();
+                if (!rawData || rawData === '[DONE]') continue;
+                try {
+                  const parsed = JSON.parse(rawData);
+                  const delta = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                  if (delta) {
+                    fullContent += delta;
+                    if (onChunk) onChunk(delta);
+                  }
+                } catch (_) {}
+              }
+            });
+
+            response.data.on('end', () => {
+              this._markGeminiKeySuccess(keyObj);
+              resolve({
+                success: true,
+                content: fullContent,
+                model: `google/${gModel} [${keyObj.id}]`,
+                keyUsed: keyObj.masked,
+              });
+            });
+
+            response.data.on('error', (err) => {
+              this._markGeminiKeyError(keyObj, 500, err.message);
+              reject(err);
+            });
           });
-        });
-
-        response.data.on('error', (err) => {
-          this._markKeyError(activeKey, 500, err.message);
-          reject(err);
-        });
-      });
-    } catch (err) {
-      this._markKeyError(activeKey, err.response?.status, err.message);
-      // Resilient fallback to chatCompletion across candidate models
-      const fallbackResult = await this.chatCompletion({ messages, temperature, maxTokens, model, enableReasoning });
-      if (onChunk && fallbackResult.content) {
-        onChunk(fallbackResult.content);
+        } catch (streamErr) {
+          const statusCode = streamErr.response?.status;
+          const errMsg = streamErr.response?.data?.error?.message || streamErr.message;
+          this._markGeminiKeyError(keyObj, statusCode, errMsg);
+          logger.warn(`[GeminiClient] Stream attempt notice (${gModel} - ${keyObj.id}): ${errMsg}`);
+          if (statusCode === 429) break; // Rotate to next key
+        }
       }
-      return fallbackResult;
     }
+
+    // Resilient fallback to chatCompletion across Gemini keys
+    const fallbackResult = await this.chatCompletion({ messages, temperature, maxTokens, model });
+    if (onChunk && fallbackResult.content) {
+      onChunk(fallbackResult.content);
+    }
+    return fallbackResult;
   }
 
   /**
@@ -683,9 +494,9 @@ Required JSON format:
     if (this.geminiKeyPool && this.geminiKeyPool.length > 0) {
       const geminiVisionModels = [
         'gemini-3.5-flash-lite',
-        'gemini-flash-lite-latest',
-        'gemini-3.5-flash',
         'gemini-3.8-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-2.5-flash',
       ];
       const userTextPrompt = `Analyze this Ethiopian crop disease sample. Return ONLY a single valid JSON object following the requested schema.
 Crop Hint: ${cropHint || 'Unknown'}.
@@ -771,74 +582,7 @@ Perenual treatment knowledge: ${JSON.stringify(perenualData || {})}.`;
         }
       }
     }
-
-    // 2. OpenRouter Multimodal Vision Fallback
-    const userContent = [];
-    userContent.push({
-      type: 'text',
-      text: `Analyze this Ethiopian crop disease sample.
-Crop Hint: ${cropHint || 'Unknown'}.
-Plant.id botanical data: ${JSON.stringify(plantIdData || {})}.
-Pl@ntNet disease detection: ${JSON.stringify(plantNetData || {})}.
-Perenual treatment knowledge: ${JSON.stringify(perenualData || {})}.`,
-    });
-
-    if (cleanBase64) {
-      userContent.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${mimeType};base64,${cleanBase64}`,
-        },
-      });
-    } else if (imageUrl) {
-      userContent.push({
-        type: 'image_url',
-        image_url: { url: imageUrl },
-      });
-    }
-
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userContent },
-    ];
-
-    const visionModels = [
-      'dots-studio/dots-3-note-preview:free',
-      'thinkingmachines/inkling:free',
-      'nvidia/nemotron-3.5-super-vl:free',
-      'google/gemma-4-26b-a4b-it:free',
-    ];
-
-    for (const vModel of visionModels) {
-      try {
-        const result = await this.chatCompletion({
-          messages,
-          temperature: 0.15,
-          responseFormat: 'json',
-          maxTokens: 1200,
-          model: vModel,
-        });
-
-        if (result && result.content) {
-          let parsed = null;
-          try {
-            parsed = JSON.parse(result.content);
-          } catch (_err) {
-            const cleanJson = result.content.replace(/```json/g, '').replace(/```/g, '').trim();
-            try {
-              parsed = JSON.parse(cleanJson);
-            } catch (_e2) {}
-          }
-          if (parsed && typeof parsed === 'object') {
-            return { success: true, diagnosis: parsed, rawContent: result.content, engine: `OpenRouter Vision (${vModel})` };
-          }
-        }
-      } catch (orErr) {
-        logger.warn(`[OpenRouterClient] OpenRouter vision attempt (${vModel}) notice: ${orErr.message}`);
-      }
-    }
-
-    // If Plant.id provided real botanical identification, synthesize from it
+    // 2. Botanical Plant.id & Agronomic Fallback Synthesis
     if (plantIdData && plantIdData.crop && plantIdData.crop.scientificName && plantIdData.crop.scientificName !== 'Crop') {
       const synthesized = this._getBilingualSynthesizedDiagnosis(cropHint, plantIdData, plantNetData, perenualData);
       return { success: true, diagnosis: synthesized, rawContent: JSON.stringify(synthesized), engine: 'Botanical Plant.id Synthesis' };
@@ -1196,7 +940,7 @@ CORE DIRECTIVES:
    * Evaluates any farmer question dynamically and constructs scientifically verified,
    * localized Ethiopian agricultural advisory in both Amharic and English.
    */
-  _generateDynamicVoiceResponse(queryText = '', preferredLang = 'am', userRole = 'FARMER', userJurisdiction = null) {
+  _generateDynamicVoiceResponse(queryText = '', preferredLang = 'am', _userRole = 'FARMER', userJurisdiction = null) {
     const cleanText = (queryText || '').replace(/\[farmer's crops:[^\]]*\]/gi, '').trim();
     const q = cleanText.toLowerCase();
     const isAmharicInput = /[\u1200-\u137F]/.test(cleanText);
@@ -1230,7 +974,7 @@ CORE DIRECTIVES:
     };
   }
 
-  _getBilingualSynthesizedDiagnosis(cropHint = 'Wheat', plantIdData = null, plantNetData = null, perenualData = null) {
+  _getBilingualSynthesizedDiagnosis(_cropHint = 'Wheat', plantIdData = null, plantNetData = null, perenualData = null) {
     // If Pl@ntNet or Plant.id provided real botanical/disease classification, use it directly
     const plantNetTop = plantNetData?.topDisease || plantNetData?.diseases?.[0] || null;
     const perenualTop = perenualData?.topResult || perenualData?.data?.[0] || null;
@@ -1379,5 +1123,9 @@ CORE DIRECTIVES:
   }
 }
 
-const openRouterClient = new OpenRouterClient();
-module.exports = openRouterClient;
+const geminiClient = new OpenRouterClient();
+module.exports = geminiClient;
+module.exports.geminiClient = geminiClient;
+module.exports.openRouterClient = geminiClient;
+module.exports.GeminiClient = OpenRouterClient;
+module.exports.OpenRouterClient = OpenRouterClient;

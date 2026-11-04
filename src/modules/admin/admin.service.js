@@ -354,7 +354,7 @@ async function getSystemHealth() {
         ...queueStats,
       },
       externalIntegrations: {
-        openRouterAI: { status: 'CONFIGURED', model: 'google/gemini-2.5-flash' },
+        openRouterAI: { status: 'CONFIGURED', model: 'gemini-3.5-flash-lite', provider: 'Google Gemini AI Studio (4-Key Pool)' },
         plantIdClassifier: { status: 'CONFIGURED' },
         smsEthiopia: { status: 'CONFIGURED', provider: 'SMSEthiopia (smsethiopia.com)', active: true },
         openMeteoWeather: { status: 'OPERATIONAL' },

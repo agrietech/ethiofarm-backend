@@ -1,7 +1,7 @@
 # EthioFarm Multi-Hazard Early Warning Platform - API Specification
 
 **Version:** 1.0.0  
-**Base URL:** `http://localhost:5000/api/v1` (Production: `https://ethiofarm.onrender.com/api/v1`)  
+**Base URL:** `http://localhost:5000/api/v1` | **Production:** `https://ethiofarm.onrender.com/api/v1`  
 **Format:** JSON (`Content-Type: application/json`)  
 **Authentication:** HTTP Bearer Token (`Authorization: Bearer <jwt_token>`)
 
@@ -29,12 +29,12 @@
 
 ---
 
-## 1. Global Principles & Standards
+## 1. Global Principles and Standards
 
 ### Response Format
 All API endpoints return standard JSON envelopes:
 
-#### Success Response (200 / 201)
+#### Success Response
 ```json
 {
   "success": true,
@@ -43,7 +43,7 @@ All API endpoints return standard JSON envelopes:
 }
 ```
 
-#### Error Response (4xx / 5xx)
+#### Error Response
 ```json
 {
   "success": false,
@@ -55,7 +55,7 @@ All API endpoints return standard JSON envelopes:
 }
 ```
 
-### Roles & RBAC Matrix
+### Roles and RBAC Matrix
 - `FARMER`: Farm registration, sensor telemetry view, alert subscription, disease diagnosis, USSD access.
 - `DEVELOPMENT_AGENT`: Multi-farm advisory, woreda threat reporting, community alert dispatch.
 - `WOREDA_OFFICER`: District risk assessment evaluation, emergency alert broadcast.
@@ -70,7 +70,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 2. Authentication & User Management (`/auth`)
+## 2. Authentication and User Management
 
 ### 2.1 Register User
 - **Method:** `POST /api/v1/auth/register`
@@ -384,7 +384,7 @@ All API endpoints return standard JSON envelopes:
   }
   ```
 
-### 2.13 Get Pending Role Requests (Supervisor/Admin)
+### 2.13 Get Pending Role Requests
 - **Method:** `GET /api/v1/auth/role-requests/pending`
 - **Auth:** Bearer Token required (Role: WOREDA_OFFICER or ADMIN)
 - **Description:** Retrieve pending role requests for review. Hierarchical filtering applied based on reviewer role.
@@ -532,7 +532,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 3. Administrative Boundaries (`/boundaries`)
+## 3. Administrative Boundaries
 
 ### 3.1 Get All Regions
 - **Method:** `GET /api/v1/boundaries/regions`
@@ -553,7 +553,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 4. Farm Plot Registry (`/farms`)
+## 4. Farm Plot Registry
 
 ### 4.1 Register Farm Plot
 - **Method:** `POST /api/v1/farms`
@@ -584,7 +584,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 5. IoT Sensor Telemetry (`/sensors`)
+## 5. IoT Sensor Telemetry
 
 ### 5.1 Register Sensor Device
 - **Method:** `POST /api/v1/sensors`
@@ -629,7 +629,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 6. Satellite & Climate Observations (`/satellite-observations`)
+## 6. Satellite and Climate Observations
 
 ### 6.1 Query Woreda Observation Time-Series
 - **Method:** `GET /api/v1/satellite-observations/woreda/:woredaId?source=CHIRPS&startDate=2026-08-01`
@@ -641,7 +641,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 7. Multi-Hazard Risk Assessments (`/risk-assessments`)
+## 7. Multi-Hazard Risk Assessments
 
 ### 7.1 Trigger Woreda Evaluation
 - **Method:** `POST /api/v1/risk-assessments/evaluate`
@@ -664,7 +664,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 8. Early Warning Alerts (`/alerts`)
+## 8. Early Warning Alerts
 
 ### 8.1 Create Early Warning Alert
 - **Method:** `POST /api/v1/alerts`
@@ -697,7 +697,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 9. AI Crop Disease Diagnosis (`/disease-diagnosis`)
+## 9. Crop Pathology Diagnosis
 
 ### 9.1 Diagnose Crop Image
 - **Method:** `POST /api/v1/disease-diagnosis/diagnose`
@@ -715,7 +715,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 10. Analytics & Agronomic Advisories (`/analytics`)
+## 10. Analytics and Agronomic Advisories
 
 ### 10.1 Get Executive Dashboard Analytics
 - **Method:** `GET /api/v1/analytics/dashboard`
@@ -759,9 +759,9 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 10A. Location-Based Map & Analytics (`/analytics/location`)
+## 10A. Location-Based Map and Analytics
 
-### 10A.1 Get User Location Map (Auto-Detect)
+### 10A.1 Get User Location Map
 - **Method:** `GET /api/v1/analytics/location/map`
 - **Auth:** Bearer Token (Required)
 - **Description:** Returns map data based on authenticated user's role and location.
@@ -799,7 +799,7 @@ All API endpoints return standard JSON envelopes:
   }
   ```
 
-### 10A.2 Get User Location Analytics (Auto-Detect)
+### 10A.2 Get User Location Analytics
 - **Method:** `GET /api/v1/analytics/location/analytics`
 - **Auth:** Bearer Token (Required)
 - **Description:** Returns analytics data based on authenticated user's role and location.
@@ -1047,7 +1047,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 11. AI Voice & Multimodal Assistant (`/ai`)
+## 11. Multimodal Voice and Agronomic Assistant
 
 ### 11.1 Voice Inquiry Processing
 - **Method:** `POST /api/v1/ai/voice-inquiry`
@@ -1068,7 +1068,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 12. Data Ingestion Pipeline (`/ingestion`)
+## 12. Data Ingestion Pipeline
 
 ### 12.1 List Ingestion Connectors Status
 - **Method:** `GET /api/v1/ingestion/connectors`
@@ -1098,7 +1098,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 13. USSD Interactive Menu (`/delivery/ussd`)
+## 13. USSD Interactive Telephony Gateway
 
 ### 13.1 USSD Callback Handler
 - **Method:** `POST /api/v1/delivery/ussd`
@@ -1113,7 +1113,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 14. Admin & Audit Control (`/admin`)
+## 14. Enterprise Administration and Audit Control
 
 ### 14.1 Web Dashboard UI
 - **Method:** `GET /api/v1/admin` or `GET /api/v1/admin/dashboard`
@@ -1144,7 +1144,7 @@ All API endpoints return standard JSON envelopes:
 - **Register Sensor:** `POST /api/v1/admin/sensors` (Body: `{hardwareId, sensorType, farmId}`)
 - **Delete Sensor:** `DELETE /api/v1/admin/sensors/:id`
 
-### 14.5 Alert Management & Emergency Broadcast
+### 14.5 Alert Management and Emergency Broadcast
 - **List Alerts:** `GET /api/v1/admin/alerts?page=1&limit=20`
 - **Broadcast Alert:** `POST /api/v1/admin/broadcast-alert` (Body: `{woredaId, hazardType, severity, titleEn, messageEn}`)
 - **Delete Alert:** `DELETE /api/v1/admin/alerts/:id`
@@ -1153,12 +1153,12 @@ All API endpoints return standard JSON envelopes:
 - **List Diagnoses:** `GET /api/v1/admin/diagnoses?page=1&limit=20`
 - **Delete Diagnosis:** `DELETE /api/v1/admin/diagnoses/:id`
 
-### 14.7 System Health, Pipeline Trigger & Audit Trail
+### 14.7 System Health, Pipeline Trigger, and Audit Trail
 - **System Health Check:** `GET /api/v1/admin/system/health`
 - **Trigger Ingestion Job:** `POST /api/v1/admin/ingestion/trigger` (Body: `{jobType: "pullChirpsRainfall"}`)
 - **Get Audit Logs:** `GET /api/v1/admin/audit-logs?limit=50`
 
-### 14.8 Role Request Management (Hierarchical Approval System)
+### 14.8 Hierarchical Role Approval Governance
 
 #### 14.8.1 Get Pending Role Requests
 - **Method:** `GET /api/v1/admin/role-requests`
@@ -1236,7 +1236,7 @@ All API endpoints return standard JSON envelopes:
 
 ---
 
-## 16. Error Handling & Status Codes
+## 16. Error Handling and Status Codes
 
 | Code | Name | Description |
 |---|---|---|

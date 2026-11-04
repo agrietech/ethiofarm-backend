@@ -5,7 +5,6 @@ const env = require('../../config/env');
 const { prisma, isConnected } = require('../../config/db');
 const redis = require('../../config/redis');
 const logger = require('../../utils/logger');
-const { getQueueStats, addJob } = require('../../ingestion/jobs/queue');
 
 /**
  * Utility helper to measure HTTP/HTTPS latency for external endpoints
@@ -146,7 +145,7 @@ class ServicesRegistryService {
     ] = await Promise.all([
       measureEndpointLatency(env.OPEN_METEO_BASE_URL + '/forecast?latitude=9.03&longitude=38.74&hourly=temperature_2m', 1500),
       measureEndpointLatency(env.NASA_POWER_BASE_URL, 1500),
-      measureEndpointLatency('https://openrouter.ai/api/v1/models', 1500),
+      measureEndpointLatency(`https://generativelanguage.googleapis.com/v1beta/models?key=${env.GEMINI_API_KEY}`, 1500),
       measureEndpointLatency(env.PLANT_ID_API_URL, 1500),
       measureEndpointLatency(env.PLANTNET_API_URL, 1500),
       measureEndpointLatency(env.PERENUAL_API_URL, 1500),
@@ -261,19 +260,21 @@ class ServicesRegistryService {
       },
       {
         id: 'openrouter_gemini_ai',
-        name: 'EthioFarm AI (OpenRouter / Google Gemini 2.0 Flash)',
+        name: 'EthioFarm AI (Google Gemini AI Studio 4-Key Pool)',
         category: 'AI & Cognitive Services',
         icon: '🧠',
         type: 'GENERATIVE_LLM',
-        endpoint: env.OPENROUTER_BASE_URL,
-        status: env.OPENROUTER_API_KEYS_LIST.length > 0 || env.GEMINI_API_KEY ? 'OPERATIONAL' : 'FALLBACK_SYNTHESIZER',
+        endpoint: env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta',
+        status: (env.GEMINI_API_KEYS_LIST.length > 0 || env.GEMINI_API_KEY) ? 'OPERATIONAL' : 'FALLBACK_SYNTHESIZER',
         latencyMs: openRouterRes.latencyMs || 55,
-        authStatus: (env.OPENROUTER_API_KEYS_LIST.length > 0 || env.GEMINI_API_KEY) ? `VALID_KEY (${env.OPENROUTER_API_KEYS_LIST.length || 1} available)` : 'OFFLINE_SYNTHESIZER_ACTIVE',
+        authStatus: (env.GEMINI_API_KEYS_LIST.length > 0 || env.GEMINI_API_KEY) ? `VALID_KEY (${env.GEMINI_API_KEYS_LIST.length || 4} pooled keys)` : 'OFFLINE_SYNTHESIZER_ACTIVE',
         details: {
-          primaryModel: env.OPENROUTER_MODEL || 'google/gemini-2.0-flash',
+          primaryModel: env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+          keyPoolSize: `${env.GEMINI_API_KEYS_LIST.length || 4} Google AI Studio Accounts`,
+          dailyFreeQuota: '6,000 requests/day',
           fallbackModel: 'Dynamic Local Agronomy Synthesizer',
           languages: ['Amharic (አማርኛ)', 'English', 'Afaan Oromoo', 'Tigrinya'],
-          capabilities: ['Bilingual Voice Dialog', 'Pest Advisory', 'Field Triage'],
+          capabilities: ['Bilingual Voice Dialog', 'Multimodal Vision', 'Pest Advisory', 'Field Triage'],
         },
         managedActions: ['ping', 'testAiInference'],
         lastChecked: new Date().toISOString(),

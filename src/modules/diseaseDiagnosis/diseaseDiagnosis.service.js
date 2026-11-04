@@ -370,7 +370,13 @@ async function diagnoseCropImage({ farmId, cropType, imageUrl, imageFile, imageB
       } catch (_) {}
     }
 
-    const validUserId = user && user.id ? user.id : null;
+    let validUserId = null;
+    if (user && user.id && isConnected()) {
+      try {
+        const existingUser = await prisma.user.findUnique({ where: { id: user.id }, select: { id: true } });
+        if (existingUser) validUserId = existingUser.id;
+      } catch (_) {}
+    }
 
     const [saved] = await prisma.$transaction([
       prisma.diseaseDiagnosis.create({
@@ -397,7 +403,7 @@ async function diagnoseCropImage({ farmId, cropType, imageUrl, imageFile, imageB
         data: {
           userId: validUserId,
           prompt: `Dual AI crop diagnosis for crop=${cropType || resolvedCropEn}`,
-          model: 'Plant.id + Google Gemini 2.5 Flash',
+          model: 'Plant.id + Google Gemini 3.5 Flash',
           feature: 'DISEASE_DIAGNOSIS',
           rawResponse: rawResponse || {},
           confidenceScore: Math.round(resolvedConfidence * 100) / 100,

@@ -30,42 +30,44 @@ async function testAllApiKeys() {
   }
 
   // --------------------------------------------------------------------------
-  // 1. OpenRouter (Gemini 2.5 Flash LLM)
+  // 1. Google Gemini AI Studio (Multi-Account 4-Key Pool)
   // --------------------------------------------------------------------------
-  console.log('1. Checking OpenRouter API Key (Gemini 2.5 Flash)...');
-  const openRouterKey = process.env.OPENROUTER_API_KEY;
-  if (!openRouterKey || openRouterKey.trim() === '') {
-    record('OpenRouter AI (Gemini)', 'LLM / GenAI', 'MISSING', '❌ NOT CONFIGURED', 0, 'No key provided in .env');
-    console.log('   ❌ Missing key');
-  } else {
-    const keyMask = `${openRouterKey.substring(0, 10)}...${openRouterKey.substring(openRouterKey.length - 4)}`;
+  console.log('1. Checking Google Gemini AI Studio 4-Key Pool...');
+  const geminiKeys = [
+    { name: 'Gemini Primary (GEMINI_API_KEY)', key: process.env.GEMINI_API_KEY },
+    { name: 'Gemini Backup 1 (GEMINI_API_KEY_2)', key: process.env.GEMINI_API_KEY_2 },
+    { name: 'Gemini Backup 2 (GEMINI_API_KEY_3)', key: process.env.GEMINI_API_KEY_3 },
+    { name: 'Gemini Backup 3 (GEMINI_API_KEY_4)', key: process.env.GEMINI_API_KEY_4 },
+  ];
+
+  for (const item of geminiKeys) {
+    if (!item.key || item.key.trim() === '') {
+      record(item.name, 'LLM / GenAI', 'MISSING', '⚠️ NOT CONFIGURED', 0, 'No key provided in .env');
+      console.log(`   ⚠️ ${item.name}: Missing key`);
+      continue;
+    }
+    const keyMask = `${item.key.substring(0, 10)}...${item.key.substring(item.key.length - 4)}`;
     try {
       const start = Date.now();
       const res = await axios.post(
-        'https://openrouter.ai/api/v1/chat/completions',
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(item.key)}`,
         {
-          model: process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash',
-          messages: [{ role: 'user', content: 'Say "AGRIETECH_OK"' }],
-          max_tokens: 10,
+          contents: [{ parts: [{ text: 'Respond with exactly: AGRIETECH_OK' }] }],
         },
         {
-          headers: {
-            Authorization: `Bearer ${openRouterKey}`,
-            'HTTP-Referer': 'https://agrietech.et',
-            'X-Title': 'AgriEtech Multi-Hazard Platform',
-          },
-          timeout: 15000,
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
         }
       );
       const latency = Date.now() - start;
-      const text = res.data?.choices?.[0]?.message?.content?.trim() || '';
-      record('OpenRouter AI (Gemini)', 'LLM / GenAI', keyMask, '✅ ACTIVE & VALID', res.status, `Model returned: "${text}"`, latency);
-      console.log(`   ✅ VALID (HTTP ${res.status}, ${latency}ms) -> "${text}"`);
+      const text = res.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+      record(item.name, 'LLM / GenAI', keyMask, '✅ ACTIVE & VALID', res.status, `Model returned: "${text}"`, latency);
+      console.log(`   ✅ ${item.name}: VALID (HTTP ${res.status}, ${latency}ms) -> "${text}"`);
     } catch (err) {
       const code = err.response?.status || 500;
       const msg = err.response?.data?.error?.message || err.message;
-      record('OpenRouter AI (Gemini)', 'LLM / GenAI', keyMask, '❌ FAILED', code, msg);
-      console.log(`   ❌ FAILED (HTTP ${code}): ${msg}`);
+      record(item.name, 'LLM / GenAI', keyMask, '❌ FAILED', code, msg);
+      console.log(`   ❌ ${item.name}: FAILED (HTTP ${code}): ${msg}`);
     }
   }
 

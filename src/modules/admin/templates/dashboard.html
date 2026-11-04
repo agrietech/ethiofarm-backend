@@ -7,6 +7,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    window.__GOOGLE_MAPS_KEY__ = '{{GOOGLE_MAPS_API_KEY}}';
+  </script>
   <style>
     :root {
       --primary: #10b981;
@@ -2845,11 +2848,19 @@
           zoomAnimation: true,
         });
 
-        // Google Maps hybrid tiles with high availability
-        const primaryTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=AIzaSyAeRxpImnvHs4VeDcd2wts_BILIhzg0Ge4', {
-          attribution: '&copy; Google Maps | EthioFarm GIS',
-          maxZoom: 20,
-        });
+        // Dynamic map tile layer with environment-injected Google Maps key and open fallback
+        const googleMapsApiKey = (typeof window.__GOOGLE_MAPS_KEY__ === 'string' && window.__GOOGLE_MAPS_KEY__ && window.__GOOGLE_MAPS_KEY__ !== '{{GOOGLE_MAPS_API_KEY}}')
+          ? window.__GOOGLE_MAPS_KEY__
+          : '';
+        const primaryTileLayer = googleMapsApiKey
+          ? L.tileLayer(`https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=${googleMapsApiKey}`, {
+              attribution: '&copy; Google Maps | EthioFarm GIS',
+              maxZoom: 20,
+            })
+          : L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | EthioFarm GIS',
+              maxZoom: 19,
+            });
 
         primaryTileLayer.on('tileerror', function() {
           console.warn('CartoDB tile load warning, applying fallback layer');
